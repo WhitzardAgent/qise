@@ -6,9 +6,9 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Tests: 288 passed](https://img.shields.io/badge/Tests-288%20passed-brightgreen.svg)](tests/)
+[![Tests: 393 passed](https://img.shields.io/badge/Tests-393%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
-[![PyPI: 0.1.0](https://img.shields.io/badge/PyPI-0.1.0-blue.svg)](pyproject.toml)
+[![Adapters: 5](https://img.shields.io/badge/Adapters-5-purple.svg)](src/qise/adapters/)
 
 [English](#overview) | [中文](./README_CN.md)
 
@@ -73,7 +73,7 @@ Unlike rule-only solutions that are easily bypassed, Qise uses **layered AI mode
 | No exfiltration detection | ExfilGuard: AI-first data exfiltration detection |
 | No tool poisoning detection | ToolSanityGuard: hash baseline + AI semantic analysis |
 | Static safety instructions | Dynamic SecurityContextProvider + Guard enforcement |
-| Requires code changes | MCP mode: zero-code, just add to config |
+| Requires code changes | Proxy mode / MCP mode: zero-code integration |
 
 ## Three-Layer Decision Flow
 
@@ -142,6 +142,37 @@ Four layers protect from soft guidance to hard enforcement:
 pip install -e ".[dev]"
 ```
 
+### One-Command Setup
+
+```bash
+# Generate default config
+qise init
+
+# Check a tool call
+qise check bash '{"command": "rm -rf /"}'
+# → {"verdict": "block", "blocked_by": "command", ...}
+
+qise check bash '{"command": "ls"}'
+# → {"verdict": "pass", "blocked_by": null, "warnings": []}
+
+# List all guards and their modes
+qise guards
+```
+
+### Zero-Code: Proxy Mode
+
+Start a local HTTP proxy that intercepts all Agent↔LLM traffic:
+
+```bash
+# Start proxy server
+qise proxy start --port 8822 --upstream https://api.openai.com
+
+# Point your agent at the proxy
+export OPENAI_API_BASE="http://localhost:8822/v1"
+```
+
+The proxy intercepts requests/responses in real-time, running all 14 guards on tool calls, injection attempts, and output leaks — with **SSE streaming support** for zero-latency text passthrough.
+
 ### Zero-Code: MCP Mode
 
 Add to your agent's MCP configuration:
@@ -157,25 +188,62 @@ Add to your agent's MCP configuration:
 }
 ```
 
-### Python SDK
+### SDK Mode: Framework Adapters
 
+**Nanobot:**
 ```python
 from qise import Shield
+from qise.adapters.nanobot import QiseNanobotHook
 
 shield = Shield.from_config()
+hook = QiseNanobotHook(shield)
+loop = AgentLoop(hooks=[hook])
+```
 
-# Check a tool call before execution
-result = shield.pipeline.run_egress(GuardContext(
-    tool_name="bash",
-    tool_args={"command": "rm -rf /"},
-))
-print(result.verdict)  # "block"
+**LangGraph:**
+```python
+from qise import Shield
+from qise.adapters.langgraph import QiseLangGraphWrapper
+
+shield = Shield.from_config()
+wrapper = QiseLangGraphWrapper(shield)
+safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
+```
+
+**NexAU:**
+```python
+from qise import Shield
+from qise.adapters.nexau import QiseNexauMiddleware
+
+shield = Shield.from_config()
+middleware = QiseNexauMiddleware(shield)
+agent = NexAUAgent(middlewares=[middleware])
+```
+
+**OpenAI Agents SDK:**
+```python
+from qise import Shield
+from qise.adapters.openai_agents import QiseOpenAIAgentsGuardrails
+
+shield = Shield.from_config()
+guardrails = QiseOpenAIAgentsGuardrails(shield)
+agent = Agent(guardrails=[guardrails.input_guardrail, guardrails.output_guardrail])
+```
+
+**Hermes:**
+```python
+from qise import Shield
+from qise.adapters.hermes import QiseHermesPlugin
+
+shield = Shield.from_config()
+plugin = QiseHermesPlugin(shield)
+plugin.register(ctx)
 ```
 
 ### Run Tests
 
 ```bash
-pytest tests/ -v    # 288 tests
+pytest tests/ -v    # 393 tests
 ```
 
 ## 14 Guards at a Glance
@@ -209,6 +277,18 @@ pytest tests/ -v    # 288 tests
 | **AuditGuard** | AI+rules (50/50) | Attack chain reconstruction, session risk scoring |
 | **OutputGuard** | AI+rules (70/30) | PII exposure, KB content leaks, credential leaks |
 
+## 5 Framework Adapters
+
+| Framework | Adapter | Hook Points | Ingress | Egress | Output | SecContext |
+|-----------|---------|-------------|---------|--------|--------|------------|
+| **Nanobot** | QiseNanobotHook | before_execute_tools, after_iteration | ✅ | ✅ | ✅ | ✅ |
+| **Hermes** | QiseHermesPlugin | pre/post_tool_call, transform_result, post_llm_call | ✅ | ✅ | ✅ | — |
+| **NexAU** | QiseNexauMiddleware | before/after_agent, before/after_model, before/after_tool | ✅ | ✅ | ✅ | ✅ |
+| **LangGraph** | QiseLangGraphWrapper | wrap/awrap_tool_call, pre_model_hook | — | ✅ | — | ✅ |
+| **OpenAI Agents** | QiseOpenAIAgentsGuardrails | input/output_guardrail, tool_input/output_guardrail | ✅ | ✅ | ✅ | — |
+
+All adapters use the **IngressCheckMixin + EgressCheckMixin** base classes — no monkey-patching, only official Hook/Plugin/Middleware APIs.
+
 ## Model Layer
 
 | Tier | Model | Latency | Usage |
@@ -217,7 +297,7 @@ pytest tests/ -v    # 288 tests
 | LLM deep analysis | Claude / GPT / Qwen-72B | <2s | Only when SLM escalates (~5%) |
 | Rule fallback | Deterministic rules | <1ms | When models unavailable (never fail-open) |
 
-**Stub mode**: Works out of the box without any model server — all guards degrade to rules gracefully.
+**Stub mode**: Works out of the box without any model server — all guards degrade to rules gracefully. Rules-based guards (command, filesystem, network, credential, tool_policy) default to **enforce** mode; AI-first guards default to **observe** mode.
 
 ## Data-Driven Threat Intelligence
 
@@ -254,30 +334,43 @@ qise/
 │   │   ├── session_tracker.py  # Cross-turn security state
 │   │   └── event_logger.py     # Structured security event logging
 │   ├── guards/            # 14 Guard implementations
-│   │   ├── prompt.py      #   Ingress: AI-first injection detection
-│   │   ├── reasoning.py   #   Ingress: AI-only chain-of-thought analysis
-│   │   ├── tool_sanity.py #   Ingress: AI-first tool poisoning + rug pulls
-│   │   ├── context.py     #   Ingress: AI+hash memory/KB poisoning
-│   │   ├── supply_chain.py#   Ingress: AI+rules source/hash verification
-│   │   ├── command.py     #   Egress: Rules-first command analysis
-│   │   ├── filesystem.py  #   Egress: Rules workspace/path protection
-│   │   ├── network.py     #   Egress: Rules SSRF/domain blocking
-│   │   ├── exfil.py       #   Egress: AI-first data exfiltration
-│   │   ├── resource.py    #   Egress: Rules+AI loop/budget/breaker
-│   │   ├── tool_policy.py #   Egress: Rules deny/approval/owner-only
-│   │   ├── credential.py  #   Output: Rules credential regex
-│   │   ├── audit.py       #   Output: Rules+AI attack chain + logging
-│   │   └── output.py      #   Output: AI+rules PII/KB leak detection
 │   ├── models/            # ModelRouter (httpx-based OpenAI-compatible client)
 │   ├── data/              # ThreatPatternLoader + BaselineManager
 │   ├── providers/         # SecurityContextProvider (DSL template rendering)
-│   ├── adapters/          # Framework adapters (coming soon)
+│   ├── adapters/          # 5 Framework adapters
+│   │   ├── base.py        #   AgentAdapter ABC + IngressCheckMixin + EgressCheckMixin
+│   │   ├── nanobot.py     #   Nanobot AgentHook integration
+│   │   ├── hermes.py      #   Hermes Plugin hook integration
+│   │   ├── nexau.py       #   NexAU Middleware (6 hooks)
+│   │   ├── langgraph.py   #   LangGraph tool wrapper + pre-model hook
+│   │   └── openai_agents.py # OpenAI Agents SDK guardrails
+│   ├── proxy/             # HTTP proxy server
+│   │   ├── server.py      #   aiohttp-based proxy with SSE streaming
+│   │   ├── streaming.py   #   SSEStreamHandler with BufferedToolCall state machine
+│   │   ├── parser.py      #   Request/Response parser for OpenAI-compatible API
+│   │   ├── interceptor.py #   ProxyInterceptor routing through Guard pipelines
+│   │   ├── context_injector.py # SecurityContext injection into system messages
+│   │   └── config.py      #   ProxyConfig with env overrides
 │   └── mcp_server.py      # MCP Server (4 security check tools)
 ├── data/
 │   ├── threat_patterns/   # 6 YAML threat patterns
 │   └── security_contexts/ # 5 DSL security context templates
-├── tests/                 # 288 tests
+├── tests/                 # 393 tests
 └── docs/                  # Architecture, Guards, Threat Model, Integration
+```
+
+## CLI Reference
+
+```bash
+qise check bash '{"command": "rm -rf /"}'  # Single security check
+qise serve                                  # Start MCP Server
+qise proxy start --port 8822                # Start HTTP proxy
+qise init                                   # Generate shield.yaml
+qise adapters                               # List framework adapters
+qise adapters nexau                         # Show integration code
+qise context bash                           # Get security context
+qise guards                                 # List registered guards
+qise version                                # Print version
 ```
 
 ## Documentation
@@ -288,8 +381,6 @@ qise/
 | [Guards](docs/guards.md) | Detailed Guard specifications and AI/rule strategies |
 | [Threat Model](docs/threat-model.md) | Attack taxonomies, trust boundaries, defense chains |
 | [Integration Guide](docs/integration.md) | Proxy/MCP/SDK modes, desktop app setup |
-| [Data Formats](docs/data-formats.md) | YAML threat patterns, security context DSL, baselines |
-| [Roadmap](docs/roadmap.md) | Development phases and milestones |
 
 ## Integration Modes
 
@@ -306,14 +397,15 @@ qise/
 | Core engine (AIGuardBase, Pipeline, Shield) | ✅ Complete |
 | 14 Guards (Ingress + Egress + Output) | ✅ Complete |
 | ModelRouter (httpx-based SLM/LLM client) | ✅ Complete |
-| CLI (check / serve / context / guards / version) | ✅ Complete |
+| Proxy Server (aiohttp + SSE streaming) | ✅ Complete |
+| 5 Framework Adapters (Nanobot, Hermes, NexAU, LangGraph, OpenAI Agents) | ✅ Complete |
+| CLI (check / serve / proxy / init / adapters / context / guards / version) | ✅ Complete |
 | MCP Server (4 security check tools) | ✅ Complete |
 | SecurityContextProvider (DSL template rendering) | ✅ Complete |
 | BaselineManager (SHA-256 hash integrity) | ✅ Complete |
-| 288 unit + integration + CLI tests | ✅ Complete |
-| Proxy server (Rust/axum) | 🔜 Phase 4 |
-| Desktop App (Tauri 2) | 🔜 Phase 4 |
-| Framework adapters | 🔜 Phase 3 |
+| Soft-Hard Defense Linkage (active_security_rules) | ✅ Complete |
+| 393 unit + integration + CLI tests | ✅ Complete |
+| Desktop App (Tauri 2) | 🔜 Planned |
 
 ## License
 

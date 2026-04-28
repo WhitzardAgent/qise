@@ -6,9 +6,9 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Tests: 288 passed](https://img.shields.io/badge/Tests-288%20passed-brightgreen.svg)](tests/)
+[![Tests: 393 passed](https://img.shields.io/badge/Tests-393%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
-[![PyPI: 0.1.0](https://img.shields.io/badge/PyPI-0.1.0-blue.svg)](pyproject.toml)
+[![Adapters: 5](https://img.shields.io/badge/Adapters-5-purple.svg)](src/qise/adapters/)
 
 [English](./README.md) | 中文
 
@@ -72,7 +72,7 @@ Qise（发音 "Cheese" 🧀）是一个开源运行时安全框架，**双向保
 | 无外泄检测 | ExfilGuard：AI-first 数据外泄检测 |
 | 无工具投毒检测 | ToolSanityGuard：哈希基线 + AI 语义分析 |
 | 静态安全指令 | 动态 SecurityContextProvider + 守卫强制执行 |
-| 需要改代码 | MCP 模式：零代码，只需添加配置 |
+| 需要改代码 | Proxy 模式 / MCP 模式：零代码集成 |
 
 ## 三层决策流
 
@@ -141,6 +141,37 @@ Qise（发音 "Cheese" 🧀）是一个开源运行时安全框架，**双向保
 pip install -e ".[dev]"
 ```
 
+### 一键配置
+
+```bash
+# 生成默认配置
+qise init
+
+# 检查工具调用
+qise check bash '{"command": "rm -rf /"}'
+# → {"verdict": "block", "blocked_by": "command", ...}
+
+qise check bash '{"command": "ls"}'
+# → {"verdict": "pass", "blocked_by": null, "warnings": []}
+
+# 列出所有守卫及模式
+qise guards
+```
+
+### 零代码：代理模式
+
+启动本地 HTTP 代理，拦截所有 Agent↔LLM 流量：
+
+```bash
+# 启动代理服务器
+qise proxy start --port 8822 --upstream https://api.openai.com
+
+# 指向代理
+export OPENAI_API_BASE="http://localhost:8822/v1"
+```
+
+代理实时拦截请求/响应，对工具调用、注入尝试、输出泄露运行全部 14 个守卫——**支持 SSE 流式传输**，文本内容零延迟透传。
+
 ### 零代码：MCP 模式
 
 添加到 Agent 的 MCP 配置：
@@ -156,26 +187,62 @@ pip install -e ".[dev]"
 }
 ```
 
-### Python SDK
+### SDK 模式：框架适配器
 
+**Nanobot：**
 ```python
 from qise import Shield
-from qise.core.models import GuardContext
+from qise.adapters.nanobot import QiseNanobotHook
 
 shield = Shield.from_config()
+hook = QiseNanobotHook(shield)
+loop = AgentLoop(hooks=[hook])
+```
 
-# 执行前检查工具调用
-result = shield.pipeline.run_egress(GuardContext(
-    tool_name="bash",
-    tool_args={"command": "rm -rf /"},
-))
-print(result.verdict)  # "block"
+**LangGraph：**
+```python
+from qise import Shield
+from qise.adapters.langgraph import QiseLangGraphWrapper
+
+shield = Shield.from_config()
+wrapper = QiseLangGraphWrapper(shield)
+safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
+```
+
+**NexAU：**
+```python
+from qise import Shield
+from qise.adapters.nexau import QiseNexauMiddleware
+
+shield = Shield.from_config()
+middleware = QiseNexauMiddleware(shield)
+agent = NexAUAgent(middlewares=[middleware])
+```
+
+**OpenAI Agents SDK：**
+```python
+from qise import Shield
+from qise.adapters.openai_agents import QiseOpenAIAgentsGuardrails
+
+shield = Shield.from_config()
+guardrails = QiseOpenAIAgentsGuardrails(shield)
+agent = Agent(guardrails=[guardrails.input_guardrail, guardrails.output_guardrail])
+```
+
+**Hermes：**
+```python
+from qise import Shield
+from qise.adapters.hermes import QiseHermesPlugin
+
+shield = Shield.from_config()
+plugin = QiseHermesPlugin(shield)
+plugin.register(ctx)
 ```
 
 ### 运行测试
 
 ```bash
-pytest tests/ -v    # 288 项测试
+pytest tests/ -v    # 393 项测试
 ```
 
 ## 14 个守卫一览
@@ -209,6 +276,18 @@ pytest tests/ -v    # 288 项测试
 | **AuditGuard** | AI+rules (50/50) | 攻击链重构、会话风险评分 |
 | **OutputGuard** | AI+rules (70/30) | PII 暴露、KB 内容泄露、凭据泄露 |
 
+## 5 个框架适配器
+
+| 框架 | 适配器 | 钩子点 | 入口 | 出口 | 输出 | 安全上下文 |
+|------|--------|--------|------|------|------|-----------|
+| **Nanobot** | QiseNanobotHook | before_execute_tools, after_iteration | ✅ | ✅ | ✅ | ✅ |
+| **Hermes** | QiseHermesPlugin | pre/post_tool_call, transform_result, post_llm_call | ✅ | ✅ | ✅ | — |
+| **NexAU** | QiseNexauMiddleware | before/after_agent, before/after_model, before/after_tool | ✅ | ✅ | ✅ | ✅ |
+| **LangGraph** | QiseLangGraphWrapper | wrap/awrap_tool_call, pre_model_hook | — | ✅ | — | ✅ |
+| **OpenAI Agents** | QiseOpenAIAgentsGuardrails | input/output_guardrail, tool_input/output_guardrail | ✅ | ✅ | ✅ | — |
+
+所有适配器基于 **IngressCheckMixin + EgressCheckMixin** 基类——无 monkey-patch，仅使用官方 Hook/Plugin/Middleware API。
+
 ## 模型层
 
 | 层级 | 模型 | 延迟 | 使用场景 |
@@ -217,7 +296,7 @@ pytest tests/ -v    # 288 项测试
 | LLM 深判 | Claude / GPT / Qwen-72B | <2s | 仅当 SLM 升级时（约 5%） |
 | 规则兜底 | 确定性规则 | <1ms | 模型不可用时（永不 fail-open） |
 
-**Stub 模式**：无需任何模型服务器即可开箱即用——所有守卫优雅降级到规则。
+**Stub 模式**：无需任何模型服务器即可开箱即用——所有守卫优雅降级到规则。规则守卫（command, filesystem, network, credential, tool_policy）默认 **enforce** 模式；AI-first 守卫默认 **observe** 模式。
 
 ## 数据驱动的威胁情报
 
@@ -250,13 +329,40 @@ qise/
 │   ├── models/            # ModelRouter (httpx-based SLM/LLM 客户端)
 │   ├── data/              # ThreatPatternLoader + BaselineManager
 │   ├── providers/         # SecurityContextProvider (DSL 模板渲染)
-│   ├── adapters/          # 框架适配器（即将推出）
+│   ├── adapters/          # 5 个框架适配器
+│   │   ├── base.py        #   AgentAdapter ABC + IngressCheckMixin + EgressCheckMixin
+│   │   ├── nanobot.py     #   Nanobot AgentHook 集成
+│   │   ├── hermes.py      #   Hermes Plugin hook 集成
+│   │   ├── nexau.py       #   NexAU Middleware (6 个钩子)
+│   │   ├── langgraph.py   #   LangGraph 工具包装 + pre-model 钩子
+│   │   └── openai_agents.py # OpenAI Agents SDK guardrails
+│   ├── proxy/             # HTTP 代理服务器
+│   │   ├── server.py      #   aiohttp 代理 + SSE 流式传输
+│   │   ├── streaming.py   #   SSEStreamHandler + BufferedToolCall 状态机
+│   │   ├── parser.py      #   OpenAI 兼容 API 请求/响应解析
+│   │   ├── interceptor.py #   ProxyInterceptor 路由到守卫管线
+│   │   ├── context_injector.py # 安全上下文注入到系统消息
+│   │   └── config.py      #   ProxyConfig 环境变量覆盖
 │   └── mcp_server.py      # MCP 服务器（4 个安全检查工具）
 ├── data/
 │   ├── threat_patterns/   # 6 个 YAML 威胁模式
 │   └── security_contexts/ # 5 个 DSL 安全上下文模板
-├── tests/                 # 263 项测试
+├── tests/                 # 393 项测试
 └── docs/                  # 架构、守卫、威胁模型、集成指南
+```
+
+## CLI 参考
+
+```bash
+qise check bash '{"command": "rm -rf /"}'  # 单次安全检查
+qise serve                                  # 启动 MCP 服务器
+qise proxy start --port 8822                # 启动 HTTP 代理
+qise init                                   # 生成 shield.yaml
+qise adapters                               # 列出框架适配器
+qise adapters nexau                         # 显示集成代码
+qise context bash                           # 获取安全上下文
+qise guards                                 # 列出已注册守卫
+qise version                                # 打印版本
 ```
 
 ## 文档
@@ -267,8 +373,6 @@ qise/
 | [守卫规范](docs/guards.md) | 详细的守卫规格和 AI/规则策略 |
 | [威胁模型](docs/threat-model.md) | 攻击分类、信任边界、防御链 |
 | [集成指南](docs/integration.md) | Proxy/MCP/SDK 模式、桌面应用设置 |
-| [数据格式](docs/data-formats.md) | YAML 威胁模式、安全上下文 DSL、基线 |
-| [路线图](docs/roadmap.md) | 开发阶段和里程碑 |
 
 ## 集成模式
 
@@ -285,14 +389,15 @@ qise/
 | 核心引擎 (AIGuardBase, Pipeline, Shield) | ✅ 完成 |
 | 14 个守卫 (入口 + 出口 + 输出) | ✅ 完成 |
 | ModelRouter (httpx-based SLM/LLM 客户端) | ✅ 完成 |
-| CLI (check / serve / context / guards / version) | ✅ 完成 |
+| 代理服务器 (aiohttp + SSE 流式传输) | ✅ 完成 |
+| 5 个框架适配器 (Nanobot, Hermes, NexAU, LangGraph, OpenAI Agents) | ✅ 完成 |
+| CLI (check / serve / proxy / init / adapters / context / guards / version) | ✅ 完成 |
 | MCP 服务器 (4 个安全检查工具) | ✅ 完成 |
 | SecurityContextProvider (DSL 模板渲染) | ✅ 完成 |
 | BaselineManager (SHA-256 哈希完整性) | ✅ 完成 |
-| 288 项单元 + 集成 + CLI 测试 | ✅ 完成 |
-| 代理服务器 (Rust/axum) | 🔜 第 4 阶段 |
-| 桌面应用 (Tauri 2) | 🔜 第 4 阶段 |
-| 框架适配器 | 🔜 第 3 阶段 |
+| 软硬防御联动 (active_security_rules) | ✅ 完成 |
+| 393 项单元 + 集成 + CLI 测试 | ✅ 完成 |
+| 桌面应用 (Tauri 2) | 🔜 计划中 |
 
 ## 许可证
 

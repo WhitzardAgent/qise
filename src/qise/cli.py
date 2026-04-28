@@ -86,6 +86,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # qise adapters hermes
     adapters_subparsers.add_parser("hermes", help="Show Hermes integration code snippet")
 
+    # qise adapters nexau
+    adapters_subparsers.add_parser("nexau", help="Show NexAU integration code snippet")
+
+    # qise adapters langgraph
+    adapters_subparsers.add_parser("langgraph", help="Show LangGraph integration code snippet")
+
+    # qise adapters openai-agents
+    adapters_subparsers.add_parser("openai-agents", help="Show OpenAI Agents SDK integration code snippet")
+
     return parser
 
 
@@ -371,19 +380,150 @@ logging:
 """
 
 
+def _nexau_snippet() -> str:
+    return """\
+# NexAU Integration
+#
+# 1. Install Qise:
+#    pip install qise
+#
+# 2. Add the middleware to your NexAU Agent:
+
+from qise import Shield
+from qise.adapters.nexau import QiseNexauMiddleware
+
+shield = Shield.from_config()
+middleware = QiseNexauMiddleware(shield)
+
+# Register with NexAU Agent
+agent = NexAUAgent(middlewares=[middleware])
+
+# The middleware will:
+#   - before_agent: check agent startup args
+#   - after_agent: check agent output for leaks
+#   - before_model: inject SecurityContext into messages
+#   - after_model: check reasoning + filter dangerous tool calls
+#   - before_tool: secondary egress check before tool execution
+#   - after_tool: check tool results for injection
+#
+# 3. Configuration (optional):
+#    Create shield.yaml to customize guard modes:
+#
+#    guards:
+#      config:
+#        command:
+#          mode: enforce    # Block dangerous commands
+#        prompt:
+#          mode: enforce    # Block injection attempts
+"""
+
+
+def _langgraph_snippet() -> str:
+    return """\
+# LangGraph Integration
+#
+# 1. Install Qise:
+#    pip install qise
+#
+# 2. Wrap your tools with Qise security checks:
+
+from qise import Shield
+from qise.adapters.langgraph import QiseLangGraphWrapper
+
+shield = Shield.from_config()
+wrapper = QiseLangGraphWrapper(shield)
+
+# Wrap tools for LangGraph ToolNode
+safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
+
+# Or use async version for async tools
+safe_tools = [wrapper.awrap_tool_call(tool) for tool in my_async_tools]
+
+# Add pre-model hook for SecurityContext injection
+graph.add_node("pre_model", wrapper.qise_pre_model_hook)
+
+# The wrapper will:
+#   - wrap_tool_call: check tool args, raise ToolException on block
+#   - awrap_tool_call: async version of wrap_tool_call
+#   - qise_pre_model_hook: inject SecurityContext into state messages
+#
+# 3. Configuration (optional):
+#    Create shield.yaml to customize guard modes:
+#
+#    guards:
+#      config:
+#        command:
+#          mode: enforce    # Block dangerous commands
+#        filesystem:
+#          mode: enforce    # Block path traversal
+"""
+
+
+def _openai_agents_snippet() -> str:
+    return """\
+# OpenAI Agents SDK Integration
+#
+# 1. Install Qise:
+#    pip install qise
+#
+# 2. Add guardrails to your Agent:
+
+from qise import Shield
+from qise.adapters.openai_agents import QiseOpenAIAgentsGuardrails
+
+shield = Shield.from_config()
+guardrails = QiseOpenAIAgentsGuardrails(shield)
+
+# Register with OpenAI Agent
+agent = Agent(
+    name="my-agent",
+    guardrails=[
+        guardrails.input_guardrail,
+        guardrails.output_guardrail,
+    ],
+)
+
+# Wrap tools with tool guardrails
+for tool in tools:
+    tool = guardrails.wrap_tool(tool)
+
+# The guardrails will:
+#   - input_guardrail: check user input for injection
+#   - output_guardrail: check agent output for leaks
+#   - tool_input_guardrail: check tool call arguments
+#   - tool_output_guardrail: check tool results for injection
+#
+# 3. Configuration (optional):
+#    Create shield.yaml to customize guard modes:
+#
+#    guards:
+#      config:
+#        command:
+#          mode: enforce    # Block dangerous commands
+#        credential:
+#          mode: enforce    # Block credential leaks
+"""
+
+
 def _cmd_adapters(args: argparse.Namespace) -> int:
     """Show adapter integration code snippets."""
     if not args.adapter_name:
         # List all adapters
         print("Available adapters:\n")
-        print("  nanobot  — Nanobot AgentHook integration (recommended)")
-        print("  hermes   — Hermes Plugin hook integration")
+        print("  nanobot       — Nanobot AgentHook integration (recommended)")
+        print("  hermes        — Hermes Plugin hook integration")
+        print("  nexau         — NexAU Middleware integration (6 hooks)")
+        print("  langgraph     — LangGraph tool wrapper integration")
+        print("  openai-agents — OpenAI Agents SDK guardrails integration")
         print("\nUse 'qise adapters <name>' for integration code snippet.")
         return 0
 
     snippets = {
         "nanobot": _nanobot_snippet(),
         "hermes": _hermes_snippet(),
+        "nexau": _nexau_snippet(),
+        "langgraph": _langgraph_snippet(),
+        "openai-agents": _openai_agents_snippet(),
     }
 
     snippet = snippets.get(args.adapter_name)
