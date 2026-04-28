@@ -178,152 +178,194 @@ MCP mode works best when combined with manual security context injection:
 
 For developers who want the deepest integration and lowest latency.
 
-### Generic Python Hook
+### Generic Python SDK
 
 ```python
 from qise import Shield
+from qise.core.models import GuardContext
 
-shield = Shield.from_config("shield.yaml")
+shield = Shield.from_config()
 
-# Before each tool call
-result = await shield.check_tool_call(
+# Check a tool call before execution
+result = shield.pipeline.run_egress(GuardContext(
     tool_name="bash",
     tool_args={"command": "rm -rf /tmp/*"},
-    session_id="session-123",
-)
+))
 
 if result.should_block:
-    return result.message
+    print(f"Blocked: {result.blocked_by}")
 ```
 
 ### Nanobot
 
 ```python
 from qise import Shield
-from qise.adapters.nanobot import NanobotShieldHook
+from qise.adapters.nanobot import QiseNanobotHook
 
-shield = Shield.from_config("shield.yaml")
-await bot.run(message, hooks=[NanobotShieldHook(shield)])
+shield = Shield.from_config()
+hook = QiseNanobotHook(shield)
+loop = AgentLoop(hooks=[hook])
 ```
 
 | Feature | Supported |
 |---------|-----------|
-| Trajectory context | Yes (session.messages) |
-| Reasoning access | Yes (assistant message) |
-| Security context injection | Yes (hook return value) |
-| Post-execution output check | Yes (after_execute_tools) |
+| Ingress (tool result check) | Yes |
+| Egress (tool call check) | Yes |
+| Output (leak detection) | Yes |
+| Security context injection | Yes |
+| Reasoning access | Yes (via agent_reasoning) |
 
 ### Hermes
 
 ```python
 from qise import Shield
-from qise.adapters.hermes import HermesShieldPlugin
+from qise.adapters.hermes import QiseHermesPlugin
 
-shield = Shield.from_config("shield.yaml")
-plugin = HermesShieldPlugin(shield)
+shield = Shield.from_config()
+plugin = QiseHermesPlugin(shield)
+plugin.register(ctx)
 ```
 
 | Feature | Supported |
 |---------|-----------|
-| Trajectory context | Yes (SessionDB) |
-| Reasoning access | Yes (LLM response text) |
-| Security context injection | Yes (system reminder) |
-| Post-execution output check | Yes (post_tool_call) |
+| Ingress (tool result check) | Yes (transform_tool_result) |
+| Egress (tool call check) | Yes (pre_tool_call → {"action": "skip"}) |
+| Output (leak detection) | Yes (post_llm_call) |
+| Security context injection | — |
+| Reasoning access | — |
 
-### OpenClaw
+### NexAU
 
 ```python
 from qise import Shield
-from qise.adapters.openclaw import OpenClawShieldPlugin
+from qise.adapters.nexau import QiseNexauMiddleware
 
-shield = Shield.from_config("shield.yaml")
-plugin = OpenClawShieldPlugin(shield)
+shield = Shield.from_config()
+middleware = QiseNexauMiddleware(shield)
+agent = NexAUAgent(middlewares=[middleware])
 ```
 
 | Feature | Supported |
 |---------|-----------|
-| Trajectory context | Yes (GatewayClient session) |
-| Reasoning access | Yes (assistant message) |
-| Security context injection | Yes (hook context modification) |
-| Post-execution output check | Partial (limited by Plugin API) |
+| Ingress (tool result check) | Yes (after_tool) |
+| Egress (tool call check) | Yes (after_model, before_tool) |
+| Output (leak detection) | Yes (after_agent) |
+| Security context injection | Yes (before_model) |
+| Reasoning access | Yes (after_model) |
 
-### OpenHands
+6 middleware hooks: before/after_agent, before/after_model, before/after_tool.
+
+### LangGraph
 
 ```python
 from qise import Shield
-from qise.adapters.openhands import OpenHandsShieldHook
+from qise.adapters.langgraph import QiseLangGraphWrapper
 
-shield = Shield.from_config("shield.yaml")
+shield = Shield.from_config()
+wrapper = QiseLangGraphWrapper(shield)
+
+# Wrap tools for ToolNode
+safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
+
+# Or async version
+safe_tools = [wrapper.awrap_tool_call(tool) for tool in my_async_tools]
+
+# Add pre-model hook for SecurityContext injection
+graph.add_node("pre_model", wrapper.qise_pre_model_hook)
 ```
 
 | Feature | Supported |
 |---------|-----------|
-| Trajectory context | Yes (HTTP API) |
-| Reasoning access | Yes (Action message) |
-| Security context injection | Yes (event stream) |
-| Post-execution output check | Yes (post_tool_use) |
+| Ingress | — |
+| Egress (tool call check) | Yes (wrap_tool_call / awrap_tool_call) |
+| Output | — |
+| Security context injection | Yes (qise_pre_model_hook) |
+| Reasoning access | — |
+
+BLOCK strategy: raises `ToolException` (if langgraph installed) or `RuntimeError`.
+
+### OpenAI Agents SDK
+
+```python
+from qise import Shield
+from qise.adapters.openai_agents import QiseOpenAIAgentsGuardrails
+
+shield = Shield.from_config()
+guardrails = QiseOpenAIAgentsGuardrails(shield)
+
+agent = Agent(
+    name="my-agent",
+    guardrails=[
+        guardrails.input_guardrail,
+        guardrails.output_guardrail,
+    ],
+)
+
+# Or wrap tools individually
+for tool in tools:
+    tool = guardrails.wrap_tool(tool)
+```
+
+| Feature | Supported |
+|---------|-----------|
+| Ingress (input check) | Yes (input_guardrail, tool_output_guardrail) |
+| Egress (tool call check) | Yes (tool_input_guardrail) |
+| Output (leak detection) | Yes (output_guardrail) |
+| Security context injection | — |
+| Reasoning access | — |
+
+BLOCK strategy: returns `GuardrailFunctionOutput(tripwire_triggered=True)`.
 
 ### Custom Adapter
 
+All adapters inherit from `AgentAdapter` and use `IngressCheckMixin` / `EgressCheckMixin`:
+
 ```python
-from qise.adapters import BaseAdapter
+from qise.adapters.base import AgentAdapter, EgressCheckMixin, IngressCheckMixin
 
-class MyFrameworkAdapter(BaseAdapter):
+class MyFrameworkAdapter(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
 
-    async def on_before_tool_call(self, tool_name, tool_args, **kwargs):
-        context = self._build_context(tool_name, tool_args, **kwargs)
-        return await self.shield.check(context)
+    def __init__(self, shield):
+        super().__init__(shield)
 
-    async def on_after_tool_call(self, tool_name, tool_args, result, **kwargs):
-        context = self._build_output_context(tool_name, tool_args, result, **kwargs)
-        return await self.shield.check_output(context)
+    def install(self):
+        """Register your hooks here."""
+        pass
 
-    def get_trajectory(self, **kwargs):
-        session = kwargs.get("session")
-        return [{"role": m.role, "content": m.content} for m in session.messages]
+    def uninstall(self):
+        """Remove your hooks here."""
+        pass
 
-    def get_reasoning(self, **kwargs):
-        session = kwargs.get("session")
-        if session.messages and session.messages[-1].role == "assistant":
-            return session.messages[-1].content
-        return None
+    # IngressCheckMixin provides:
+    #   check_user_input(content, trust_boundary, session_id)
+    #   check_tool_result(content, tool_name, session_id)
 
-    def inject_security_context(self, context, **kwargs):
-        session = kwargs.get("session")
-        session.add_system_message(context)
+    # EgressCheckMixin provides:
+    #   check_tool_call(tool_name, tool_args, session_id, **kwargs)
+    #   check_output(text, session_id)
+    #   _get_security_rules(tool_name, tool_args)
 ```
 
 ---
 
-## Adapter Interface
+## Adapter Architecture
 
-All adapters implement a common interface:
+All 5 adapters share a common base:
 
-```python
-class BaseAdapter(ABC):
-    """Base class for framework adapters."""
+```
+AgentAdapter (ABC)
+├── install() / uninstall()
+│
+├── IngressCheckMixin
+│   ├── check_user_input()  → Ingress pipeline
+│   └── check_tool_result() → Ingress pipeline
+│
+└── EgressCheckMixin
+    ├── check_tool_call()   → Egress pipeline (auto-fills active_security_rules)
+    └── check_output()      → Output pipeline
+```
 
-    shield: Shield
-
-    @abstractmethod
-    async def on_before_tool_call(self, tool_name: str, tool_args: dict, **kwargs) -> GuardResult:
-        """Called before a tool is executed. Return result to allow or block."""
-
-    @abstractmethod
-    async def on_after_tool_call(self, tool_name: str, tool_args: dict, result: Any, **kwargs) -> GuardResult:
-        """Called after a tool is executed. Check output for leaks."""
-
-    @abstractmethod
-    def get_trajectory(self, **kwargs) -> list[dict]:
-        """Extract conversation trajectory from framework session."""
-
-    @abstractmethod
-    def get_reasoning(self, **kwargs) -> str | None:
-        """Extract agent's chain of thought from framework session."""
-
-    @abstractmethod
-    def inject_security_context(self, context: str, **kwargs) -> None:
-        """Inject security context into agent's observation."""
+Each adapter maps framework-specific hooks to these mixin methods. No monkey-patching — only official Hook/Plugin/Middleware APIs.
 ```
 
 ---

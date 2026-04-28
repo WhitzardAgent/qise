@@ -17,7 +17,6 @@ from pydantic import BaseModel, Field
 
 from qise.core.models import ModelUnavailableError
 
-
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------

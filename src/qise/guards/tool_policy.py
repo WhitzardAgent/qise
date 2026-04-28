@@ -7,13 +7,11 @@ using fnmatch glob patterns for flexible matching.
 from __future__ import annotations
 
 import fnmatch
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from qise.core.guard_base import AIGuardBase, RuleChecker
 from qise.core.models import GuardContext, GuardResult, GuardVerdict, RiskAttribution
-
 
 # ---------------------------------------------------------------------------
 # Config models

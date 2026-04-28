@@ -7,14 +7,11 @@ and domain denylist matches. Warns on redirect-following parameters.
 from __future__ import annotations
 
 import ipaddress
-import re
 import socket
-from typing import Any
 from urllib.parse import urlparse
 
 from qise.core.guard_base import AIGuardBase, RuleChecker
 from qise.core.models import GuardContext, GuardResult, GuardVerdict, RiskAttribution
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -139,7 +136,7 @@ class NetworkGuardRuleChecker(RuleChecker):
                         return result
                 except ValueError:
                     continue
-        except (socket.gaierror, socket.timeout, OSError):
+        except (TimeoutError, socket.gaierror, OSError):
             # DNS resolution failed — warn (could be SSRF with bad DNS)
             return GuardResult(
                 guard_name="network",

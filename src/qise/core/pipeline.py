@@ -14,7 +14,6 @@ Execution rules:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
 
 from qise.core.guard_base import AIGuardBase
 from qise.core.models import (

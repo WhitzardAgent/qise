@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from qise.core.models import GuardContext, GuardVerdict, PipelineResult
+from qise.core.models import GuardContext, PipelineResult
 from qise.proxy.parser import ParsedRequest, ParsedResponse
 
 

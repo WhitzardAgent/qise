@@ -303,11 +303,11 @@ class ProxyServer:
                 resp_body = await resp.read()
                 content_type = resp.content_type
 
-                # Build response headers (skip hop-by-hop)
+                # Build response headers (skip hop-by-hop + Content-Type which is set via content_type param)
                 resp_headers = {}
                 for key, value in resp.headers.items():
                     key_lower = key.lower()
-                    if key_lower in ("transfer-encoding", "connection", "content-encoding"):
+                    if key_lower in ("transfer-encoding", "connection", "content-encoding", "content-type"):
                         continue
                     resp_headers[key] = value
 

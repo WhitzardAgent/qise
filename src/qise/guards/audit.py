@@ -12,7 +12,6 @@ from typing import Any
 from qise.core.guard_base import AIGuardBase, RuleChecker
 from qise.core.models import GuardContext, GuardResult, GuardVerdict, RiskAttribution
 
-
 # ---------------------------------------------------------------------------
 # Attack pattern definitions
 # ---------------------------------------------------------------------------

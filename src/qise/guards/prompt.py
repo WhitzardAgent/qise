@@ -21,10 +21,8 @@ from qise.core.models import (
     GuardVerdict,
     RiskAttribution,
     TrustLevel,
-    trust_level_for,
 )
 from qise.data.pattern_loader import ThreatPatternLoader
-
 
 # ---------------------------------------------------------------------------
 # Unicode invisible character ranges

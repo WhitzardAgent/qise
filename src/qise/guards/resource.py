@@ -7,11 +7,9 @@ and enforces budget limits (max iterations, API calls).
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
 from qise.core.guard_base import AIGuardBase, RuleChecker
 from qise.core.models import GuardContext, GuardResult, GuardVerdict, RiskAttribution
-
 
 # ---------------------------------------------------------------------------
 # Defaults

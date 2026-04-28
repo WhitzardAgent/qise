@@ -15,9 +15,7 @@ from qise.core.models import (
     GuardContext,
     GuardResult,
     GuardVerdict,
-    RiskAttribution,
 )
-
 
 # ---------------------------------------------------------------------------
 # Threshold adjustment mapping

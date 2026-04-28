@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from qise.adapters.base import AgentAdapter, EgressCheckMixin, IngressCheckMixin
 from qise.core.shield import Shield
@@ -99,6 +100,9 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
                 except ImportError:
                     raise RuntimeError(reason)
 
+            # Handle langchain BaseTool objects (use .invoke()) vs plain functions
+            if hasattr(tool, "invoke") and callable(tool.invoke):
+                return tool.invoke(tool_args)
             return tool(*args, **kwargs)
 
         return wrapped
@@ -136,6 +140,9 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
                 except ImportError:
                     raise RuntimeError(reason)
 
+            # Handle langchain BaseTool objects (use .ainvoke()) vs plain functions
+            if hasattr(tool, "ainvoke") and callable(tool.ainvoke):
+                return await tool.ainvoke(tool_args)
             return await tool(*args, **kwargs)
 
         return wrapped

@@ -138,8 +138,9 @@ class QiseHermesPlugin(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
     ) -> None:
         """Record tool call result in session tracker."""
         if self.session_id:
-            from qise.core.models import ToolCallRecord
             import time
+
+            from qise.core.models import ToolCallRecord
 
             self.shield.session_tracker.record_tool_call(
                 self.session_id,

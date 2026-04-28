@@ -220,7 +220,6 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
         print(f"Error: unknown proxy subcommand '{args.proxy_command}'", file=sys.stderr)
         return 1
 
-    from qise.core.shield import Shield
     from qise.proxy.config import ProxyConfig
     from qise.proxy.server import ProxyServer
 

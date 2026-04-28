@@ -11,7 +11,6 @@ from collections import defaultdict
 
 from qise.core.models import GuardResult, GuardVerdict, ToolCallRecord
 
-
 # Verdict weights for risk scoring
 _VERDICT_WEIGHTS: dict[str, float] = {
     GuardVerdict.BLOCK: 1.0,

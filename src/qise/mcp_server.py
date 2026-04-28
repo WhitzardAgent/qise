@@ -15,16 +15,14 @@ Configuration via QISE_CONFIG environment variable (defaults to ./shield.yaml).
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from qise.core.models import GuardContext, GuardVerdict
+from qise.core.models import GuardContext
 from qise.core.shield import Shield
-
 
 # ---------------------------------------------------------------------------
 # Server setup

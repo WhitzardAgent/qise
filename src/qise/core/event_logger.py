@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -49,7 +49,7 @@ class EventLogger:
             return
 
         event: dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "event_type": "guard_result",
             "session_id": session_id,
             "guard_name": result.guard_name,
@@ -72,7 +72,7 @@ class EventLogger:
             return
 
         event: dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "event_type": "pipeline_result",
             "session_id": session_id,
             "verdict": result.verdict,
@@ -85,7 +85,7 @@ class EventLogger:
     def log_event(self, event_type: str, data: dict[str, Any]) -> None:
         """Log a custom event as structured JSON."""
         event = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "event_type": event_type,
             **data,
         }

@@ -7,13 +7,11 @@ description length anomaly, keyword signatures from ThreatPatternLoader.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from qise.core.guard_base import AIGuardBase, RuleChecker
 from qise.core.models import GuardContext, GuardResult, GuardVerdict, RiskAttribution
 from qise.data.baseline_manager import BaselineManager
 from qise.data.pattern_loader import ThreatPatternLoader
-
 
 # ---------------------------------------------------------------------------
 # Shadow patterns

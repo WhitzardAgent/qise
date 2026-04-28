@@ -17,7 +17,6 @@ from pydantic import BaseModel, Field
 
 from qise.models.router import ModelConfig
 
-
 # ---------------------------------------------------------------------------
 # Config sub-models
 # ---------------------------------------------------------------------------

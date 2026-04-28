@@ -12,14 +12,11 @@ from typing import Any
 from qise.core.config import ShieldConfig
 from qise.core.event_logger import EventLogger
 from qise.core.guard_base import AIGuardBase
-from qise.core.models import GuardContext, GuardResult, GuardVerdict, PipelineResult
+from qise.core.models import GuardContext, PipelineResult
 from qise.core.pipeline import GuardPipeline
 from qise.core.session_tracker import SessionTracker
 from qise.data.baseline_manager import BaselineManager
 from qise.data.pattern_loader import ThreatPatternLoader
-from qise.models.router import ModelConfig, ModelRouter
-from qise.providers.security_context import SecurityContextProvider
-
 
 # Guard imports
 from qise.guards.audit import AuditGuard
@@ -36,6 +33,8 @@ from qise.guards.resource import ResourceGuard
 from qise.guards.supply_chain import SupplyChainGuard
 from qise.guards.tool_policy import ToolPolicyGuard, ToolPolicyProfile
 from qise.guards.tool_sanity import ToolSanityGuard
+from qise.models.router import ModelRouter
+from qise.providers.security_context import SecurityContextProvider
 
 # Guard name → factory class mapping
 _GUARD_FACTORIES: dict[str, type[AIGuardBase]] = {

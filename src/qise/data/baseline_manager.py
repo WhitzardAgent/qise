@@ -9,13 +9,12 @@ Baselines are persisted as YAML files in baselines_dir/{item_type}_{item_id}.yam
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -83,7 +82,7 @@ class BaselineManager:
             source=source,
             content_hash=self.compute_hash(description),
             content_length=len(description),
-            registered_at=datetime.now(timezone.utc).isoformat(),
+            registered_at=datetime.now(UTC).isoformat(),
             metadata=metadata or {},
         )
         self._save(record)
@@ -107,7 +106,7 @@ class BaselineManager:
             source=source,
             content_hash=self.compute_hash(content),
             content_length=len(content),
-            registered_at=datetime.now(timezone.utc).isoformat(),
+            registered_at=datetime.now(UTC).isoformat(),
             metadata=metadata or {},
         )
         self._save(record)
@@ -131,7 +130,7 @@ class BaselineManager:
             source=source,
             content_hash=self.compute_hash(content),
             content_length=len(content),
-            registered_at=datetime.now(timezone.utc).isoformat(),
+            registered_at=datetime.now(UTC).isoformat(),
             metadata=metadata or {},
         )
         self._save(record)

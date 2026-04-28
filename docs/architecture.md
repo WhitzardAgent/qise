@@ -33,7 +33,8 @@ Qise is organized as a layered system with three integration modes ranging from 
 │                                                                          │
 │  ┌── Mode C: SDK Mode (Code Integration) ─────────────────────────────┐ │
 │  │  Framework Adapters: 注册 Hook/Plugin 到 Agent 框架                │ │
-│  │  • OpenClaw Plugin │ Hermes Plugin │ Nanobot Hook │ OpenHands Hook  │ │
+│  │  • Nanobot Hook │ Hermes Plugin │ NexAU Middleware               │ │
+│  │  • LangGraph Wrapper │ OpenAI Agents Guardrails                  │ │
 │  │  • 完整轨迹访问 │ 推理访问 │ 安全上下文注入 │ 自动拦截              │ │
 │  │  适用于: 愿意修改 Agent 代码的开发者                                │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
@@ -196,7 +197,7 @@ await bot.run(message, hooks=[NanobotShieldHook(shield)])
 | 安全上下文注入 | 直接修改 Agent context |
 | 最低延迟 | 同进程调用，无网络开销 |
 
-**适用 Agent**: OpenClaw, Hermes, Nanobot, OpenHands（需要各自适配器）
+**适用 Agent**: Nanobot, Hermes, NexAU, LangGraph, OpenAI Agents SDK（需要各自适配器）
 
 **优势**: 能力最全, 延迟最低
 **劣势**: 需要修改 Agent 代码

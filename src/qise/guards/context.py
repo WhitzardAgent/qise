@@ -13,7 +13,6 @@ from qise.core.models import GuardContext, GuardResult, GuardVerdict, RiskAttrib
 from qise.data.baseline_manager import BaselineManager
 from qise.data.pattern_loader import ThreatPatternLoader
 
-
 # ---------------------------------------------------------------------------
 # Low-trust sources
 # ---------------------------------------------------------------------------

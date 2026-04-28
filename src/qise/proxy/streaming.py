@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import AsyncGenerator
 from enum import Enum
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from qise.proxy.interceptor import ProxyInterceptor
 from qise.proxy.parser import ResponseParser
@@ -272,7 +273,7 @@ class SSEStreamHandler:
                 }
             ],
         }
-        return f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+        return f"data: {json.dumps(chunk)}\n\n".encode()
 
     def _build_response_body(self, buf: BufferedToolCall) -> dict[str, Any]:
         """Build a synthetic response body for the interceptor from a buffered tool call."""

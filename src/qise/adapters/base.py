@@ -6,10 +6,9 @@ EgressCheckMixin to route content through the Guard Pipeline.
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import Any
-
-import time
 
 from qise.core.models import GuardContext, PipelineResult, ToolCallRecord
 from qise.core.shield import Shield
