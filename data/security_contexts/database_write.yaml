@@ -1,0 +1,23 @@
+id: SC-DB-001
+name: Database Write Operations
+trigger:
+  tool_patterns: ["*sql*", "*database*", "*db*"]
+  operation_types: ["write", "insert", "update", "delete"]
+
+rules:
+  - id: R001
+    description: "Never use string concatenation for user input in SQL"
+    severity: high
+    check_type: ai
+
+  - id: R002
+    description: "Limit affected rows to max_rows_affected"
+    severity: medium
+    check_type: rule
+    params:
+      max_rows_affected: 10000
+
+constraints:
+  - type: write_access
+    pattern: "public_*"
+    description: "Only write to public-facing tables"

@@ -1,0 +1,27 @@
+id: SC-NET-001
+name: Network Requests
+trigger:
+  tool_patterns: ["*fetch*", "*http*", "*request*", "*curl*", "*wget*"]
+
+rules:
+  - id: R001
+    description: "Never send credentials or API keys in URL parameters"
+    severity: critical
+    check_type: rule
+
+  - id: R002
+    description: "Do not access internal service endpoints (169.254.x.x, 10.x.x.x)"
+    severity: critical
+    check_type: rule
+
+  - id: R003
+    description: "Validate URLs before making requests - check for redirect chains"
+    severity: medium
+    check_type: ai
+
+constraints:
+  - type: ssrf_protection
+    description: "Block requests to private IP ranges"
+  - type: redirect_limit
+    pattern: "5"
+    description: "Maximum 5 redirects"
