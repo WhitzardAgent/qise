@@ -165,17 +165,17 @@ class Shield:
 
     def _build_context_provider(self) -> SecurityContextProvider:
         """Build SecurityContextProvider from config data path."""
-        contexts_dir = Path(self.config.data.security_contexts_dir)
+        contexts_dir = self.config.data.resolve_data_dir("security_contexts")
         return SecurityContextProvider(contexts_dir)
 
     def _build_pattern_loader(self) -> ThreatPatternLoader:
         """Build ThreatPatternLoader from config data path."""
-        patterns_dir = Path(self.config.data.threat_patterns_dir)
+        patterns_dir = self.config.data.resolve_data_dir("threat_patterns")
         return ThreatPatternLoader(patterns_dir)
 
     def _build_baseline_manager(self) -> BaselineManager:
         """Build BaselineManager from config data path."""
-        baselines_dir = Path(self.config.data.baselines_dir)
+        baselines_dir = self.config.data.resolve_data_dir("baselines")
         return BaselineManager(baselines_dir)
 
     def _build_guards(self) -> GuardPipeline:

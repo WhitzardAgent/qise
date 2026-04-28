@@ -1,0 +1,26 @@
+id: SC-KB-001
+name: Knowledge Base Access
+trigger:
+  tool_patterns: ["*rag*", "*search*", "*retrieve*", "*knowledge*"]
+
+rules:
+  - id: R001
+    description: "Do not reproduce knowledge base content verbatim in responses"
+    severity: high
+    check_type: ai
+
+  - id: R002
+    description: "Summarize rather than quote when referencing KB content"
+    severity: medium
+    check_type: ai
+
+  - id: R003
+    description: "Flag if the same KB document is accessed more than 3 times in a session"
+    severity: medium
+    check_type: rule
+    params:
+      access_threshold: 3
+
+constraints:
+  - type: kb_content_protection
+    description: "KB content must not be transmitted via tool calls"

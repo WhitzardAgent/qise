@@ -1,0 +1,26 @@
+id: SC-SH-001
+name: Shell Command Execution
+trigger:
+  tool_patterns: ["*bash*", "*shell*", "*exec*", "*command*", "*terminal*"]
+
+rules:
+  - id: R001
+    description: "Never pipe untrusted content to shell execution (curl | bash, wget | sh)"
+    severity: critical
+    check_type: rule
+
+  - id: R002
+    description: "Do not use sudo or privilege escalation commands unless explicitly authorized"
+    severity: critical
+    check_type: rule
+
+  - id: R003
+    description: "Avoid modifying system files or configurations"
+    severity: high
+    check_type: ai
+
+constraints:
+  - type: no_pipe_to_shell
+    description: "Block command chains that pipe to shell execution"
+  - type: no_privilege_escalation
+    description: "Block sudo, su, chmod 777, chown root"

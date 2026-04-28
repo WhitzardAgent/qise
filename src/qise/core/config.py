@@ -53,9 +53,32 @@ class GuardsConfig(BaseModel):
 
 
 class DataConfig(BaseModel):
-    threat_patterns_dir: str = "./data/threat_patterns"
-    security_contexts_dir: str = "./data/security_contexts"
-    baselines_dir: str = "./data/baselines"
+    threat_patterns_dir: str = ""
+    security_contexts_dir: str = ""
+    baselines_dir: str = ""
+
+    def resolve_data_dir(self, subdir: str) -> Path:
+        """Resolve a data directory: CWD-relative first, then package-bundled."""
+        attr = f"{subdir}_dir"
+        configured = getattr(self, attr)
+        if configured:
+            p = Path(configured)
+            if p.is_absolute():
+                return p
+            # CWD-relative
+            cwd_path = Path.cwd() / p
+            if cwd_path.exists():
+                return cwd_path
+        # Fallback: package-bundled data
+        try:
+            from importlib.resources import files
+            pkg_path = files("qise.data") / subdir
+            if pkg_path.is_dir():
+                return Path(str(pkg_path))
+        except Exception:
+            pass
+        # Last resort: CWD-relative even if it doesn't exist
+        return Path.cwd() / (configured or f"./data/{subdir}")
 
 
 class LoggingConfig(BaseModel):

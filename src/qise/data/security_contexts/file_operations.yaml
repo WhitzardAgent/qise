@@ -1,0 +1,21 @@
+id: SC-FS-001
+name: File System Operations
+trigger:
+  tool_patterns: ["*file*", "*write*", "*read*"]
+
+rules:
+  - id: R001
+    description: "Never write to system directories"
+    severity: critical
+    check_type: rule
+    params:
+      deny_paths: ["/etc", "/usr", "/bin", "/sbin", "/var"]
+
+  - id: R002
+    description: "Verify file content does not contain credentials before writing"
+    severity: high
+    check_type: ai
+
+constraints:
+  - type: workspace_only
+    description: "All file operations must stay within workspace"

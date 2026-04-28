@@ -1,0 +1,31 @@
+id: SC-TS-001
+name: Tool Call Safety
+trigger:
+  tool_patterns: ["*tool_call*", "*tool_exec*", "*tool_invoke*"]
+
+rules:
+  - id: R001
+    description: "Verify tool descriptions have not changed since registration (rug pull detection)"
+    severity: critical
+    check_type: rule
+
+  - id: R002
+    description: "Do not call tools from unverified or untrusted sources"
+    severity: high
+    check_type: rule
+
+  - id: R003
+    description: "Check tool arguments for injection content before execution"
+    severity: high
+    check_type: ai
+
+  - id: R004
+    description: "Validate tool results for indirect injection before processing"
+    severity: high
+    check_type: ai
+
+constraints:
+  - type: source_whitelist
+    description: "Only use tools from verified sources"
+  - type: hash_integrity
+    description: "Tool descriptions must match registered hash baseline"

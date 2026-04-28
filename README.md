@@ -6,7 +6,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-green.svg)](LICENSE)
-[![Tests: 393 passed](https://img.shields.io/badge/Tests-393%20passed-brightgreen.svg)](tests/)
+[![Tests: 410 passed](https://img.shields.io/badge/Tests-410%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
 [![Adapters: 5](https://img.shields.io/badge/Adapters-5-purple.svg)](src/qise/adapters/)
 
@@ -139,7 +139,7 @@ Four layers protect from soft guidance to hard enforcement:
 ### Install
 
 ```bash
-pip install -e ".[dev]"
+pip install qise
 ```
 
 ### One-Command Setup
@@ -243,7 +243,7 @@ plugin.register(ctx)
 ### Run Tests
 
 ```bash
-pytest tests/ -v    # 393 tests
+pytest tests/ -v    # 410 tests
 ```
 
 ## 14 Guards at a Glance
@@ -298,6 +298,23 @@ All adapters use the **IngressCheckMixin + EgressCheckMixin** base classes — n
 | Rule fallback | Deterministic rules | <1ms | When models unavailable (never fail-open) |
 
 **Stub mode**: Works out of the box without any model server — all guards degrade to rules gracefully. Rules-based guards (command, filesystem, network, credential, tool_policy) default to **enforce** mode; AI-first guards default to **observe** mode.
+
+## Performance
+
+Rule-only mode adds virtually zero overhead:
+
+| Operation | Target | Measured (p95) |
+|-----------|--------|----------------|
+| Rule fast-path (single guard) | <1ms | ~0.02ms |
+| Full egress pipeline (6 guards) | <10ms | ~0.02ms |
+| Full ingress pipeline (5 guards) | <10ms | ~0.02ms |
+| Full output pipeline (3 guards) | <10ms | ~0.01ms |
+| Shield initialization | <100ms | ~7ms |
+| Security context render | <5ms | ~0.01ms |
+
+100 sequential egress checks: **~1.8ms total** (~0.02ms avg).
+
+See [docs/performance.md](docs/performance.md) for detailed benchmarks.
 
 ## Data-Driven Threat Intelligence
 
@@ -354,8 +371,8 @@ qise/
 │   └── mcp_server.py      # MCP Server (4 security check tools)
 ├── data/
 │   ├── threat_patterns/   # 6 YAML threat patterns
-│   └── security_contexts/ # 5 DSL security context templates
-├── tests/                 # 393 tests
+│   └── security_contexts/ # 8 DSL security context templates
+├── tests/                 # 410 tests
 └── docs/                  # Architecture, Guards, Threat Model, Integration
 ```
 
@@ -381,6 +398,8 @@ qise version                                # Print version
 | [Guards](docs/guards.md) | Detailed Guard specifications and AI/rule strategies |
 | [Threat Model](docs/threat-model.md) | Attack taxonomies, trust boundaries, defense chains |
 | [Integration Guide](docs/integration.md) | Proxy/MCP/SDK modes, desktop app setup |
+| [Quick Start](docs/quickstart.md) | 5-minute setup guide |
+| [Performance](docs/performance.md) | Latency benchmarks |
 
 ## Integration Modes
 
@@ -404,7 +423,7 @@ qise version                                # Print version
 | SecurityContextProvider (DSL template rendering) | ✅ Complete |
 | BaselineManager (SHA-256 hash integrity) | ✅ Complete |
 | Soft-Hard Defense Linkage (active_security_rules) | ✅ Complete |
-| 393 unit + integration + CLI tests | ✅ Complete |
+| 410 unit + integration + performance tests | ✅ Complete |
 | Desktop App (Tauri 2) | 🔜 Planned |
 
 ## License

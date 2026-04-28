@@ -1,0 +1,38 @@
+id: SC-EP-001
+name: Exfiltration Prevention
+trigger:
+  tool_patterns: ["*http*", "*curl*", "*wget*", "*fetch*", "*request*", "*send*", "*upload*", "*post*"]
+
+rules:
+  - id: R001
+    description: "Do not send credentials, API keys, or tokens to external URLs"
+    severity: critical
+    check_type: rule
+
+  - id: R002
+    description: "Verify destination URLs are not on the deny list"
+    severity: high
+    check_type: rule
+
+  - id: R003
+    description: "Do not encode sensitive data in URL parameters, subdomains, or headers"
+    severity: high
+    check_type: ai
+
+  - id: R004
+    description: "Check for DNS exfiltration patterns (encoded subdomains)"
+    severity: medium
+    check_type: ai
+
+  - id: R005
+    description: "Do not send internal documents or knowledge base content to external services"
+    severity: high
+    check_type: ai
+
+constraints:
+  - type: ssrf_protection
+    description: "Block requests to internal/private IP ranges"
+  - type: destination_validation
+    description: "Validate final redirect destination, not just initial URL"
+  - type: no_sensitive_data_in_requests
+    description: "Scan request body for credentials/PII before sending"

@@ -1,0 +1,41 @@
+id: SC-DP-001
+name: Data Protection
+trigger:
+  tool_patterns: ["*database*", "*db*", "*sql*", "*store*", "*save*", "*write*"]
+  operation_types: ["write", "insert", "update", "delete", "store"]
+
+rules:
+  - id: R001
+    description: "Never expose credentials, API keys, or secrets in output"
+    severity: critical
+    check_type: rule
+
+  - id: R002
+    description: "Do not include PII (emails, phone numbers, SSNs) in responses"
+    severity: high
+    check_type: rule
+
+  - id: R003
+    description: "Limit result set sizes to prevent mass data extraction"
+    severity: medium
+    check_type: rule
+    params:
+      max_rows: 1000
+
+  - id: R004
+    description: "Do not reproduce knowledge base content verbatim in output"
+    severity: high
+    check_type: ai
+
+  - id: R005
+    description: "Validate user input before using in database queries (SQL injection prevention)"
+    severity: critical
+    check_type: rule
+
+constraints:
+  - type: pii_redaction
+    description: "Automatically redact detected PII in output"
+  - type: result_limit
+    description: "Maximum 1000 rows per query unless explicitly requested"
+  - type: parameterized_queries
+    description: "Use parameterized queries, never string concatenation for user input"

@@ -6,7 +6,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-green.svg)](LICENSE)
-[![Tests: 393 passed](https://img.shields.io/badge/Tests-393%20passed-brightgreen.svg)](tests/)
+[![Tests: 410 passed](https://img.shields.io/badge/Tests-410%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
 [![Adapters: 5](https://img.shields.io/badge/Adapters-5-purple.svg)](src/qise/adapters/)
 
@@ -138,7 +138,7 @@ Qise（发音 "Cheese" 🧀）是一个开源运行时安全框架，**双向保
 ### 安装
 
 ```bash
-pip install -e ".[dev]"
+pip install qise
 ```
 
 ### 一键配置
@@ -242,7 +242,7 @@ plugin.register(ctx)
 ### 运行测试
 
 ```bash
-pytest tests/ -v    # 393 项测试
+pytest tests/ -v    # 410 项测试
 ```
 
 ## 14 个守卫一览
@@ -298,6 +298,23 @@ pytest tests/ -v    # 393 项测试
 
 **Stub 模式**：无需任何模型服务器即可开箱即用——所有守卫优雅降级到规则。规则守卫（command, filesystem, network, credential, tool_policy）默认 **enforce** 模式；AI-first 守卫默认 **observe** 模式。
 
+## 性能
+
+纯规则模式几乎零开销：
+
+| 操作 | 目标 | 实测 (p95) |
+|------|------|-----------|
+| 规则快速路（单守卫） | <1ms | ~0.02ms |
+| 完整出口管线（6 守卫） | <10ms | ~0.02ms |
+| 完整入口管线（5 守卫） | <10ms | ~0.02ms |
+| 完整输出管线（3 守卫） | <10ms | ~0.01ms |
+| Shield 初始化 | <100ms | ~7ms |
+| 安全上下文渲染 | <5ms | ~0.01ms |
+
+100 次连续出口检查：**总耗时 ~1.8ms**（平均 ~0.02ms）。
+
+详见 [docs/performance.md](docs/performance.md)。
+
 ## 数据驱动的威胁情报
 
 威胁模式是 YAML 数据，不是硬编码正则——可版本控制、可共享、AI 可读：
@@ -346,8 +363,8 @@ qise/
 │   └── mcp_server.py      # MCP 服务器（4 个安全检查工具）
 ├── data/
 │   ├── threat_patterns/   # 6 个 YAML 威胁模式
-│   └── security_contexts/ # 5 个 DSL 安全上下文模板
-├── tests/                 # 393 项测试
+│   └── security_contexts/ # 8 个 DSL 安全上下文模板
+├── tests/                 # 410 项测试
 └── docs/                  # 架构、守卫、威胁模型、集成指南
 ```
 
@@ -396,7 +413,7 @@ qise version                                # 打印版本
 | SecurityContextProvider (DSL 模板渲染) | ✅ 完成 |
 | BaselineManager (SHA-256 哈希完整性) | ✅ 完成 |
 | 软硬防御联动 (active_security_rules) | ✅ 完成 |
-| 393 项单元 + 集成 + CLI 测试 | ✅ 完成 |
+| 410 项单元 + 集成 + 性能测试 | ✅ 完成 |
 | 桌面应用 (Tauri 2) | 🔜 计划中 |
 
 ## 许可证

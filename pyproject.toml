@@ -5,12 +5,21 @@ build-backend = "hatchling.build"
 [project]
 name = "qise"
 version = "0.1.0"
-description = "AI-first runtime security framework for AI agents"
+description = "AI-first runtime security framework for AI agents — 14 guards, 5 framework adapters, sub-ms rule checks"
 readme = "README.md"
 license = "CC-BY-NC-SA-4.0"
 requires-python = ">=3.11"
 authors = [
     { name = "Qise Team" },
+]
+keywords = [
+    "ai-security",
+    "agent-security",
+    "prompt-injection",
+    "guardrails",
+    "llm-security",
+    "ai-agent",
+    "runtime-security",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -19,7 +28,11 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: Pydantic",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pydantic>=2.0",
@@ -28,6 +41,12 @@ dependencies = [
     "httpx>=0.25",
     "aiohttp>=3.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/opq-qise/qise"
+Documentation = "https://github.com/opq-qise/qise/tree/main/docs"
+Repository = "https://github.com/opq-qise/qise"
+Issues = "https://github.com/opq-qise/qise/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -42,6 +61,11 @@ qise = "qise.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qise"]
+artifacts = [
+    "src/qise/data/threat_patterns/*.yaml",
+    "src/qise/data/security_contexts/*.yaml",
+    "src/qise/data/baselines/*.yaml",
+]
 
 [tool.ruff]
 target-version = "py311"
