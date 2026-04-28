@@ -170,6 +170,12 @@ class GuardContext(BaseModel):
     # Framework-specific data
     framework_metadata: dict[str, Any] = {}
 
+    # Soft-hard linkage: security rules from SecurityContextProvider
+    active_security_rules: list[str] = Field(
+        default_factory=list,
+        description="Security rules from SecurityContextProvider for current context",
+    )
+
     def trust_level(self) -> TrustLevel | None:
         """Convenience: return trust level for this context's trust boundary."""
         return trust_level_for(self.trust_boundary)

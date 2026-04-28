@@ -115,9 +115,15 @@ class Shield:
         }
 
         # Determine which pipelines to run based on context
+        if context.tool_name in ("output", "output_check", "content_check") and context.trust_boundary is None:
+            # Output check: credential leaks, PII, KB content
+            return self.pipeline.run_output(context, guard_modes)
+
         if context.trust_boundary is not None:
+            # Ingress: external data entering agent context
             return self.pipeline.run_ingress(context, guard_modes)
 
+        # Egress: agent action going to external world
         return self.pipeline.run_egress(context, guard_modes)
 
     async def check_tool_call(

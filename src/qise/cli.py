@@ -3,6 +3,7 @@
 Subcommands:
     qise check <tool_name> <tool_args_json>  — Single security check
     qise serve                                — Start MCP Server
+    qise proxy start                          — Start HTTP proxy server
     qise context <tool_name>                  — Get security context text
     qise guards                               — List registered guards
     qise version                              — Print version
@@ -47,6 +48,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="MCP transport (default: stdio)",
     )
 
+    # qise proxy
+    proxy_parser = subparsers.add_parser("proxy", help="Proxy server commands")
+    proxy_subparsers = proxy_parser.add_subparsers(dest="proxy_command")
+
+    # qise proxy start
+    proxy_start = proxy_subparsers.add_parser("start", help="Start HTTP proxy server")
+    proxy_start.add_argument("--port", type=int, default=None, help="Listen port (default: from config)")
+    proxy_start.add_argument("--host", default=None, help="Listen host (default: 127.0.0.1)")
+    proxy_start.add_argument("--upstream", default=None, help="Upstream LLM API base URL")
+    proxy_start.add_argument("--upstream-key", default=None, help="Upstream LLM API key")
+    proxy_start.add_argument("--no-inject", action="store_true", help="Disable security context injection")
+    proxy_start.add_argument("--observe", action="store_true", help="Never block, only warn (observe mode)")
+
     # qise context
     context_parser = subparsers.add_parser("context", help="Get security context for a tool")
     context_parser.add_argument("tool_name", help="Tool name")
@@ -57,6 +71,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # qise version
     subparsers.add_parser("version", help="Print version")
+
+    # qise init
+    init_parser = subparsers.add_parser("init", help="Generate shield.yaml configuration file")
+    init_parser.add_argument("--force", action="store_true", help="Overwrite existing shield.yaml")
+
+    # qise adapters
+    adapters_parser = subparsers.add_parser("adapters", help="Framework adapter integration")
+    adapters_subparsers = adapters_parser.add_subparsers(dest="adapter_name")
+
+    # qise adapters nanobot
+    adapters_subparsers.add_parser("nanobot", help="Show Nanobot integration code snippet")
+
+    # qise adapters hermes
+    adapters_subparsers.add_parser("hermes", help="Show Hermes integration code snippet")
 
     return parser
 
@@ -173,6 +201,283 @@ def _cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_proxy(args: argparse.Namespace) -> int:
+    """Start the HTTP proxy server."""
+    if not args.proxy_command:
+        print("Error: specify a proxy subcommand (e.g., 'qise proxy start')", file=sys.stderr)
+        return 1
+
+    if args.proxy_command != "start":
+        print(f"Error: unknown proxy subcommand '{args.proxy_command}'", file=sys.stderr)
+        return 1
+
+    from qise.core.shield import Shield
+    from qise.proxy.config import ProxyConfig
+    from qise.proxy.server import ProxyServer
+
+    shield = _get_shield(args.config)
+    proxy_config = ProxyConfig.from_shield_config(shield.config)
+
+    # Apply CLI overrides
+    if args.port is not None:
+        proxy_config.listen_port = args.port
+    if args.host is not None:
+        proxy_config.listen_host = args.host
+    if args.upstream is not None:
+        proxy_config.upstream_base_url = args.upstream.rstrip("/")
+    if args.upstream_key is not None:
+        proxy_config.upstream_api_key = args.upstream_key
+    if args.no_inject:
+        proxy_config.inject_security_context = False
+    if args.observe:
+        proxy_config.block_on_guard_block = False
+
+    server = ProxyServer(shield, proxy_config)
+
+    async def _run() -> None:
+        await server.start()
+        print(f"Qise proxy running on {proxy_config.listen_host}:{proxy_config.listen_port}")
+        print(f"Upstream: {proxy_config.upstream_base_url or '(not configured)'}")
+        print("Press Ctrl+C to stop")
+        try:
+            # Run forever until interrupted
+            import signal
+
+            loop = asyncio.get_event_loop()
+            stop_event = asyncio.Event()
+
+            def _signal_handler() -> None:
+                stop_event.set()
+
+            loop.add_signal_handler(signal.SIGINT, _signal_handler)
+            loop.add_signal_handler(signal.SIGTERM, _signal_handler)
+
+            await stop_event.wait()
+        finally:
+            await server.stop()
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
+    """Generate a shield.yaml configuration file."""
+    from pathlib import Path
+
+    config_path = Path("shield.yaml")
+    if config_path.exists() and not args.force:
+        print(f"Error: {config_path} already exists. Use --force to overwrite.", file=sys.stderr)
+        return 1
+
+    content = _default_shield_yaml()
+    config_path.write_text(content)
+    print(f"Created {config_path}")
+    print("Edit this file to customize guard modes, model endpoints, and data paths.")
+    return 0
+
+
+def _default_shield_yaml() -> str:
+    """Return the default shield.yaml content."""
+    return """\
+version: "1.0"
+
+# Integration mode: proxy | mcp | sdk
+integration:
+  mode: sdk
+  proxy:
+    port: 8822
+    auto_takeover: true
+    crash_recovery: true
+
+# Model configuration (leave empty for rule-only mode)
+models:
+  slm:
+    base_url: ""
+    model: ""
+    timeout_ms: 200
+  llm:
+    base_url: ""
+    model: ""
+    timeout_ms: 5000
+  embedding:
+    base_url: ""
+    model: ""
+
+# Guard configuration
+guards:
+  enabled:
+    - prompt
+    - command
+    - credential
+    - reasoning
+    - filesystem
+    - network
+    - exfil
+    - resource
+    - audit
+    - tool_sanity
+    - context
+    - output
+    - tool_policy
+    - supply_chain
+  config:
+    # AI-first guards default to observe (need SLM for reliable detection)
+    prompt:
+      mode: observe
+    reasoning:
+      mode: observe
+    exfil:
+      mode: observe
+    tool_sanity:
+      mode: observe
+    context:
+      mode: observe
+    supply_chain:
+      mode: observe
+    output:
+      mode: observe
+    audit:
+      mode: observe
+    resource:
+      mode: observe
+
+    # Rules-based guards default to enforce (low false-positive rate)
+    # Uncomment to change:
+    # command:
+    #   mode: enforce
+    # filesystem:
+    #   mode: enforce
+    # network:
+    #   mode: enforce
+    # credential:
+    #   mode: enforce
+    # tool_policy:
+    #   mode: enforce
+
+# Data paths
+data:
+  threat_patterns_dir: "./data/threat_patterns"
+  security_contexts_dir: "./data/security_contexts"
+  baselines_dir: "./data/baselines"
+
+# Logging
+logging:
+  level: INFO
+  format: json
+  output: stderr
+"""
+
+
+def _cmd_adapters(args: argparse.Namespace) -> int:
+    """Show adapter integration code snippets."""
+    if not args.adapter_name:
+        # List all adapters
+        print("Available adapters:\n")
+        print("  nanobot  — Nanobot AgentHook integration (recommended)")
+        print("  hermes   — Hermes Plugin hook integration")
+        print("\nUse 'qise adapters <name>' for integration code snippet.")
+        return 0
+
+    snippets = {
+        "nanobot": _nanobot_snippet(),
+        "hermes": _hermes_snippet(),
+    }
+
+    snippet = snippets.get(args.adapter_name)
+    if snippet is None:
+        print(f"Error: unknown adapter '{args.adapter_name}'", file=sys.stderr)
+        return 1
+
+    print(snippet)
+    return 0
+
+
+def _nanobot_snippet() -> str:
+    return """\
+# Nanobot Integration
+#
+# 1. Install Qise:
+#    pip install qise
+#
+# 2. Add the hook to your AgentLoop:
+
+from qise import Shield
+from qise.adapters.nanobot import QiseNanobotHook
+
+shield = Shield.from_config()
+hook = QiseNanobotHook(shield)
+
+# Pass the hook to your AgentLoop
+loop = AgentLoop(hooks=[hook])
+
+# The hook will:
+#   - before_execute_tools: check each tool call, remove dangerous ones
+#   - after_iteration: check tool results for injection, output for leaks
+#
+# 3. Configuration (optional):
+#    Create shield.yaml to customize guard modes:
+#
+#    guards:
+#      config:
+#        command:
+#          mode: enforce    # Block dangerous commands
+#        prompt:
+#          mode: enforce    # Block injection attempts
+#        credential:
+#          mode: enforce    # Block credential leaks
+#
+# Default mode is "observe" (log only, never block).
+"""
+
+
+def _hermes_snippet() -> str:
+    return """\
+# Hermes Integration
+#
+# 1. Install Qise:
+#    pip install qise
+#
+# 2. Create a Hermes plugin:
+#
+#    plugins/qise/plugin.yaml:
+#      name: qise-security
+#      provides_hooks: [pre_tool_call, post_tool_call, transform_tool_result, post_llm_call]
+#
+#    plugins/qise/__init__.py:
+
+from qise import Shield
+from qise.adapters.hermes import QiseHermesPlugin
+
+def register(ctx):
+    shield = Shield.from_config()
+    plugin = QiseHermesPlugin(shield)
+    plugin.register(ctx)
+
+# The plugin will:
+#   - pre_tool_call: block dangerous tool calls (returns {"action": "skip"})
+#   - transform_tool_result: sanitize tool results with injection content
+#   - post_tool_call: log results to session tracker
+#   - post_llm_call: check LLM output for credential/PII leaks
+#
+# 3. Configuration (optional):
+#    Create shield.yaml to customize guard modes:
+#
+#    guards:
+#      config:
+#        command:
+#          mode: enforce    # Block dangerous commands
+#        prompt:
+#          mode: enforce    # Block injection attempts
+#        credential:
+#          mode: enforce    # Block credential leaks
+#
+# Default mode is "observe" (log only, never block).
+"""
+
+
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
@@ -184,6 +489,9 @@ def main() -> None:
     dispatch = {
         "check": _cmd_check,
         "serve": _cmd_serve,
+        "proxy": _cmd_proxy,
+        "init": _cmd_init,
+        "adapters": _cmd_adapters,
         "context": _cmd_context,
         "guards": _cmd_guards,
         "version": _cmd_version,

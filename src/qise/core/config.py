@@ -93,6 +93,15 @@ class ToolPolicyConfigModel(BaseModel):
 # Top-level config
 # ---------------------------------------------------------------------------
 
+# Rules-based guards that default to enforce mode (low false-positive rate)
+_ENFORCE_BY_DEFAULT = frozenset({
+    "command",       # Rules-first: hardwired blacklist
+    "filesystem",    # Rules: path protection
+    "network",       # Rules: SSRF/CIDR blocking
+    "credential",    # Rules: regex pattern matching
+    "tool_policy",   # Rules: deny/allow lists
+})
+
 
 class ShieldConfig(BaseModel):
     """Root configuration model for Qise shield.yaml."""
@@ -172,10 +181,19 @@ class ShieldConfig(BaseModel):
     # ------------------------------------------------------------------
 
     def guard_mode(self, guard_name: str) -> str:
-        """Return the mode for a specific guard, defaulting to 'observe'."""
+        """Return the mode for a specific guard.
+
+        Default by guard type:
+          - Rules-based guards (low false-positive rate): enforce
+          - AI-first guards (need SLM to be reliable): observe
+        Users can override via shield.yaml.
+        """
         gc = self.guards.config.get(guard_name)
         if gc is not None:
             return gc.mode
+        # Rules-based guards default to enforce — low false-positive rate
+        if guard_name in _ENFORCE_BY_DEFAULT:
+            return "enforce"
         return "observe"
 
     def is_guard_enabled(self, guard_name: str) -> bool:

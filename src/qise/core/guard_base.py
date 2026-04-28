@@ -127,7 +127,14 @@ class AIGuardBase(ABC):
                 pass  # Fall through to rule fallback
 
         # Layer 3: Rule fallback (never fail-open)
+        # Re-run rule check — if rules can give a definitive answer, use it.
+        # Only fall to check_safe_default() when rules are also uncertain.
         if self.rule_fallback is not None:
+            rule_result = self.rule_fallback.check(context)
+            if rule_result.verdict in (GuardVerdict.BLOCK, GuardVerdict.PASS):
+                rule_result.latency_ms = _elapsed_ms(start)
+                return rule_result
+            # Rules are uncertain → conservative WARN
             result = self.rule_fallback.check_safe_default(context)
             result.latency_ms = _elapsed_ms(start)
             return result
@@ -202,6 +209,7 @@ class AIGuardBase(ABC):
 
     def _render_prompt(self, template: str, context: GuardContext) -> str:
         """Render a prompt template with context variables."""
+        active_security_rules = "\n".join(context.active_security_rules) if context.active_security_rules else "None"
         return template.format(
             tool_name=context.tool_name,
             tool_args=context.tool_args,
@@ -217,6 +225,7 @@ class AIGuardBase(ABC):
             session_id=context.session_id or "",
             user_id=context.user_id or "",
             integration_mode=context.integration_mode,
+            active_security_rules=active_security_rules,
         )
 
     def _parse_model_response(

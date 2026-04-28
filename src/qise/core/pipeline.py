@@ -60,6 +60,9 @@ class SubPipeline:
         final_verdict = GuardVerdict.PASS
         guard_modes = guard_modes or {}
 
+        # Snapshot original thresholds to restore after run
+        original_thresholds: dict[str, float] = {}
+
         for guard in self.guards:
             # Skip disabled guards
             mode = guard_modes.get(guard.name)
@@ -68,9 +71,9 @@ class SubPipeline:
 
             # Apply any threshold adjustments from ReasoningGuard
             if guard.name in threshold_adjustments:
-                original = guard.slm_confidence_threshold
+                original_thresholds[guard.name] = guard.slm_confidence_threshold
                 guard.slm_confidence_threshold = max(
-                    0.1, original + threshold_adjustments[guard.name]
+                    0.1, guard.slm_confidence_threshold + threshold_adjustments[guard.name]
                 )
 
             try:
@@ -113,6 +116,13 @@ class SubPipeline:
             # by falling through to LLM in AIGuardBase.check().
             # No special pipeline handling needed — the guard returns its
             # final verdict after internal escalation.
+
+        # Restore original thresholds to prevent cross-session accumulation
+        for gname, original in original_thresholds.items():
+            for guard in self.guards:
+                if guard.name == gname:
+                    guard.slm_confidence_threshold = original
+                    break
 
         return PipelineResult(
             verdict=final_verdict,
