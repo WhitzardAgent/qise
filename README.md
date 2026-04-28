@@ -6,8 +6,9 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Tests: 263 passed](https://img.shields.io/badge/Tests-263%20passed-brightgreen.svg)](tests/)
+[![Tests: 288 passed](https://img.shields.io/badge/Tests-288%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
+[![PyPI: 0.1.0](https://img.shields.io/badge/PyPI-0.1.0-blue.svg)](pyproject.toml)
 
 [English](#overview) | [中文](./README_CN.md)
 
@@ -64,15 +65,15 @@ Unlike rule-only solutions that are easily bypassed, Qise uses **layered AI mode
 
 ## Why Qise
 
-| Problem | Existing Solutions | Qise |
-|---------|-------------------|------|
-| Keyword rules easily bypassed | XSafeClaw: fuzzy matching (0.82 threshold) | AI understands attack semantics |
-| Single model bottleneck | XSafeClaw: only 4B model | SLM <50ms fast-screen + LLM deep analysis |
-| Fail-open on model errors | XSafeClaw & Lakera pass through | Rule fallback — **never fail-open** |
-| No exfiltration detection | No open-source solution covers this | ExfilGuard: AI-first data exfil detection |
-| No tool poisoning detection | No open-source solution covers this | ToolSanityGuard: hash baseline + AI |
-| Static safety instructions | SAFETY.md (Agent can ignore) | Dynamic context + Guard enforcement |
-| Requires code changes | Most solutions need integration | Proxy mode: zero-code, one-click |
+| Problem | Qise's Approach |
+|---------|----------------|
+| Keyword rules easily bypassed | AI understands attack semantics, not just pattern matching |
+| Single model bottleneck | Layered models: SLM <50ms fast-screen + LLM deep analysis |
+| Fail-open on model errors | Rule fallback — **never fail-open** |
+| No exfiltration detection | ExfilGuard: AI-first data exfiltration detection |
+| No tool poisoning detection | ToolSanityGuard: hash baseline + AI semantic analysis |
+| Static safety instructions | Dynamic SecurityContextProvider + Guard enforcement |
+| Requires code changes | MCP mode: zero-code, just add to config |
 
 ## Three-Layer Decision Flow
 
@@ -174,7 +175,7 @@ print(result.verdict)  # "block"
 ### Run Tests
 
 ```bash
-pytest tests/ -v    # 263 tests
+pytest tests/ -v    # 288 tests
 ```
 
 ## 14 Guards at a Glance
@@ -275,7 +276,7 @@ qise/
 ├── data/
 │   ├── threat_patterns/   # 6 YAML threat patterns
 │   └── security_contexts/ # 5 DSL security context templates
-├── tests/                 # 263 tests
+├── tests/                 # 288 tests
 └── docs/                  # Architecture, Guards, Threat Model, Integration
 ```
 
@@ -305,11 +306,11 @@ qise/
 | Core engine (AIGuardBase, Pipeline, Shield) | ✅ Complete |
 | 14 Guards (Ingress + Egress + Output) | ✅ Complete |
 | ModelRouter (httpx-based SLM/LLM client) | ✅ Complete |
-| BaselineManager (SHA-256 hash integrity) | ✅ Complete |
-| ThreatPatternLoader (YAML threat patterns) | ✅ Complete |
+| CLI (check / serve / context / guards / version) | ✅ Complete |
 | MCP Server (4 security check tools) | ✅ Complete |
-| SessionTracker + EventLogger | ✅ Complete |
-| 263 unit + integration tests | ✅ Complete |
+| SecurityContextProvider (DSL template rendering) | ✅ Complete |
+| BaselineManager (SHA-256 hash integrity) | ✅ Complete |
+| 288 unit + integration + CLI tests | ✅ Complete |
 | Proxy server (Rust/axum) | 🔜 Phase 4 |
 | Desktop App (Tauri 2) | 🔜 Phase 4 |
 | Framework adapters | 🔜 Phase 3 |

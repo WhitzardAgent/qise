@@ -6,8 +6,9 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Tests: 263 passed](https://img.shields.io/badge/Tests-263%20passed-brightgreen.svg)](tests/)
+[![Tests: 288 passed](https://img.shields.io/badge/Tests-288%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
+[![PyPI: 0.1.0](https://img.shields.io/badge/PyPI-0.1.0-blue.svg)](pyproject.toml)
 
 [English](./README.md) | 中文
 
@@ -63,15 +64,15 @@ Qise（发音 "Cheese" 🧀）是一个开源运行时安全框架，**双向保
 
 ## 为什么选择 Qise
 
-| 痛点 | 现有方案 | Qise |
-|------|---------|------|
-| 关键词规则易绕过 | XSafeClaw：模糊匹配（0.82 阈值） | AI 理解攻击语义 |
-| 单模型瓶颈 | XSafeClaw：仅 4B 模型 | SLM <50ms 快筛 + LLM 深判 |
-| 模型不可用时放行 | XSafeClaw 和 Lakera 失败时放行 | 规则兜底——**永不 fail-open** |
-| 无外泄检测 | 无开源方案覆盖 | ExfilGuard：AI-first 数据外泄检测 |
-| 无工具投毒检测 | 无开源方案覆盖 | ToolSanityGuard：哈希基线 + AI |
-| 静态安全指令 | SAFETY.md 注入（Agent 可忽略） | 动态上下文 + 守卫强制执行 |
-| 需要改代码 | 多数方案需要代码集成 | 代理模式：零代码，一键保护 |
+| 痛点 | Qise 的方案 |
+|------|------------|
+| 关键词规则易绕过 | AI 理解攻击语义，不仅依赖模式匹配 |
+| 单模型瓶颈 | 分层模型：SLM <50ms 快筛 + LLM 深判 |
+| 模型不可用时放行 | 规则兜底——**永不 fail-open** |
+| 无外泄检测 | ExfilGuard：AI-first 数据外泄检测 |
+| 无工具投毒检测 | ToolSanityGuard：哈希基线 + AI 语义分析 |
+| 静态安全指令 | 动态 SecurityContextProvider + 守卫强制执行 |
+| 需要改代码 | MCP 模式：零代码，只需添加配置 |
 
 ## 三层决策流
 
@@ -174,7 +175,7 @@ print(result.verdict)  # "block"
 ### 运行测试
 
 ```bash
-pytest tests/ -v    # 263 项测试
+pytest tests/ -v    # 288 项测试
 ```
 
 ## 14 个守卫一览
@@ -284,11 +285,11 @@ qise/
 | 核心引擎 (AIGuardBase, Pipeline, Shield) | ✅ 完成 |
 | 14 个守卫 (入口 + 出口 + 输出) | ✅ 完成 |
 | ModelRouter (httpx-based SLM/LLM 客户端) | ✅ 完成 |
-| BaselineManager (SHA-256 哈希完整性) | ✅ 完成 |
-| ThreatPatternLoader (YAML 威胁模式) | ✅ 完成 |
+| CLI (check / serve / context / guards / version) | ✅ 完成 |
 | MCP 服务器 (4 个安全检查工具) | ✅ 完成 |
-| SessionTracker + EventLogger | ✅ 完成 |
-| 263 项单元 + 集成测试 | ✅ 完成 |
+| SecurityContextProvider (DSL 模板渲染) | ✅ 完成 |
+| BaselineManager (SHA-256 哈希完整性) | ✅ 完成 |
+| 288 项单元 + 集成 + CLI 测试 | ✅ 完成 |
 | 代理服务器 (Rust/axum) | 🔜 第 4 阶段 |
 | 桌面应用 (Tauri 2) | 🔜 第 4 阶段 |
 | 框架适配器 | 🔜 第 3 阶段 |
