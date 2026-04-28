@@ -7,7 +7,7 @@ name = "qise"
 version = "0.1.0"
 description = "AI-first runtime security framework for AI agents"
 readme = "README.md"
-license = "Apache-2.0"
+license = "CC-BY-NC-SA-4.0"
 requires-python = ">=3.11"
 authors = [
     { name = "Qise Team" },
@@ -15,7 +15,7 @@ authors = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: Free For Educational Use",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
