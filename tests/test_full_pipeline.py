@@ -28,7 +28,8 @@ class TestFullPipelineGuardRegistration:
         output_names = [g.name for g in s.pipeline.output.guards]
 
         assert "prompt" in ingress_names
-        assert "reasoning" in ingress_names
+        assert "reasoning" in egress_names  # Cross-cutting: placed in egress (runs before command/exfil)
+        assert "reasoning" in output_names  # Also in output for audit correlation
         assert "command" in egress_names
         assert "filesystem" in egress_names
         assert "network" in egress_names

@@ -43,17 +43,20 @@ Unlike rule-only solutions that are easily bypassed, Qise uses **layered AI mode
 │   │  └────────┘ └────────────┘ └─────────┘ └──────────────┘ │ │
 │   │                                                           │ │
 │   │  Egress (Agent → World)                                   │ │
-│   │  ┌─────────┐ ┌──────────┐ ┌────────┐ ┌──────┐ ┌──────┐ │ │
-│   │  │ Command │ │Filesystem│ │Network │ │Exfil │ │Policy│ │ │
-│   │  │  Guard  │ │  Guard   │ │ Guard  │ │Guard │ │Guard │ │ │
-│   │  └─────────┘ └──────────┘ └────────┘ └──────┘ └──────┘ │ │
-│   │                         + ResourceGuard                    │ │
+│   │  ┌──────────┐┌─────────┐┌──────────┐┌────────┐┌──────┐  │ │
+│   │  │Reasoning ││Command  ││Filesystem││Network ││Exfil │  │ │
+│   │  │  Guard*  ││ Guard   ││  Guard   ││ Guard  ││Guard │  │ │
+│   │  └──────────┘└─────────┘└──────────┘└────────┘└──────┘  │ │
+│   │  ┌──────┐ ┌──────┐                                    │ │
+│   │  │Policy│ │Resrc │                                    │ │
+│   │  │Guard │ │Guard │                                    │ │
+│   │  └──────┘ └──────┘                                    │ │
 │   │                                                           │ │
 │   │  Output (Audit)                                           │ │
-│   │  ┌───────────┐ ┌──────────┐ ┌──────────┐                 │ │
-│   │  │Credential │ │  Audit   │ │  Output  │                 │ │
-│   │  │   Guard   │ │  Guard   │ │  Guard   │                 │ │
-│   │  └───────────┘ └──────────┘ └──────────┘                 │ │
+│   │  ┌──────────┐┌───────────┐ ┌──────────┐ ┌──────────┐    │ │
+│   │  │Reasoning ││Credential │ │  Audit   │ │  Output  │    │ │
+│   │  │  Guard*  ││   Guard   │ │  Guard   │ │  Guard   │    │ │
+│   │  └──────────┘└───────────┘ └──────────┘ └──────────┘    │ │
 │   └───────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │   ┌─── Shared Services ──────────────────────────────────────┐ │
@@ -83,15 +86,16 @@ Every guard uses the same decision flow — rules first for speed, AI for semant
   ┌──────────────────┐
   │ Rule Fast-Path   │  <1ms — deterministic BLOCK or PASS
   │ (regex, hash,    │  e.g., "rm -rf /" → BLOCK
-  │  patterns)       │  e.g., matching hash → PASS
-  └────────┬─────────┘
-           │ uncertain
+  │  patterns)       │  For AI-first guards, only BLOCK short-circuits
+  └────────┬─────────┘  (rule PASS flows to SLM for final say)
+           │ uncertain or PASS (AI-first guards)
            ▼
   ┌──────────────────┐
   │ SLM Fast-Screen  │  <50ms — semantic classification
   │ (≤4B model)      │  e.g., obfuscated command → BLOCK
   └────────┬─────────┘  e.g., paraphrased injection → ESCALATE
-           │ low confidence
+           │ SLM can override low-confidence rule WARNs (<0.65)
+           │ but not high-confidence ones (≥0.65)
            ▼
   ┌──────────────────┐
   │ LLM Deep Analysis│  <2s — full trajectory reasoning
@@ -104,6 +108,8 @@ Every guard uses the same decision flow — rules first for speed, AI for semant
   │ (never fail-open)│  e.g., WARN on uncertain + network tool
   └──────────────────┘
 ```
+
+**Key principle**: SLM can ESCALATE a rule verdict but selectively DOWNGRADE it. Trust boundary isolation WARNs (low confidence, <0.65) are precautions SLM can override with content analysis. Hardcoded pattern WARNs (high confidence, ≥0.65) are findings SLM cannot downgrade.
 
 ## Defense in Depth
 
@@ -253,7 +259,6 @@ pytest tests/ -v    # 410 tests
 | Guard | Strategy | Detects |
 |-------|----------|---------|
 | **PromptGuard** | AI-first (80/20) | Indirect injection, multi-turn attacks, context poisoning |
-| **ReasoningGuard** | AI-only (100/0) | Manipulation traces in chain-of-thought |
 | **ToolSanityGuard** | AI-first (80/20) | Tool description poisoning, rug pulls, name shadowing |
 | **ContextGuard** | AI+hash (70/30) | Memory/KB poisoning, data tampering, hash integrity |
 | **SupplyChainGuard** | AI+rules (60/40) | Malicious Skills, MCP tampering, source verification |
@@ -262,6 +267,7 @@ pytest tests/ -v    # 410 tests
 
 | Guard | Strategy | Detects |
 |-------|----------|---------|
+| **ReasoningGuard** \* | AI-only (100/0) | Manipulation traces in chain-of-thought, threshold adjustment |
 | **CommandGuard** | Rules+AI (70/30) | Shell injection, dangerous commands, privilege escalation |
 | **FilesystemGuard** | Rules (90/10) | Path traversal, workspace violations, system dir access |
 | **NetworkGuard** | Rules (90/10) | SSRF, forbidden domains, internal network scanning |
@@ -273,9 +279,12 @@ pytest tests/ -v    # 410 tests
 
 | Guard | Strategy | Detects |
 |-------|----------|---------|
+| **ReasoningGuard** \* | AI-only (100/0) | Manipulation traces in chain-of-thought, threshold adjustment |
 | **CredentialGuard** | Rules (100/0) | API keys, secrets, tokens in output |
 | **AuditGuard** | AI+rules (50/50) | Attack chain reconstruction, session risk scoring |
 | **OutputGuard** | AI+rules (70/30) | PII exposure, KB content leaks, credential leaks |
+
+> **\*** ReasoningGuard is a cross-cutting guard that appears in both Egress and Output pipelines. It detects manipulation in the agent's chain-of-thought and adjusts thresholds of other guards — it does not block independently.
 
 ## 5 Framework Adapters
 
@@ -337,6 +346,19 @@ rule_signatures:
     confidence: 0.9
 ```
 
+## Evaluation Results
+
+R12-tuned evaluation (SLM + rules pipeline vs rules-only baseline):
+
+| Metric | Rules-Only | SLM + Rules | Delta |
+|--------|-----------|-------------|-------|
+| **Precision** | 0.643 | **1.000** | +0.357 |
+| **Recall** | 0.973 | **1.000** | +0.027 |
+| **F1** | 0.774 | **1.000** | +0.226 |
+| **FPR** | 0.400 | **0.000** | +0.400 (lower=better) |
+
+Per-guard F1: prompt 0.681→1.000, reasoning 0.800→1.000, command 1.000→1.000, exfil 0.909→1.000. 22 samples improved, 0 regressed.
+
 ## Architecture
 
 ```
@@ -352,7 +374,7 @@ qise/
 │   │   └── event_logger.py     # Structured security event logging
 │   ├── guards/            # 14 Guard implementations
 │   ├── models/            # ModelRouter (httpx-based OpenAI-compatible client)
-│   ├── data/              # ThreatPatternLoader + BaselineManager
+│   ├── data/              # ThreatPatternLoader + BaselineManager + PromptExampleLoader
 │   ├── providers/         # SecurityContextProvider (DSL template rendering)
 │   ├── adapters/          # 5 Framework adapters
 │   │   ├── base.py        #   AgentAdapter ABC + IngressCheckMixin + EgressCheckMixin
@@ -371,8 +393,10 @@ qise/
 │   └── mcp_server.py      # MCP Server (4 security check tools)
 ├── data/
 │   ├── threat_patterns/   # 6 YAML threat patterns
-│   └── security_contexts/ # 8 DSL security context templates
+│   ├── security_contexts/ # 8 DSL security context templates
+│   └── prompts/           # 6 YAML few-shot example libraries (103 examples)
 ├── tests/                 # 410 tests
+├── eval/                  # Evaluation datasets and results
 └── docs/                  # Architecture, Guards, Threat Model, Integration
 ```
 
@@ -423,6 +447,9 @@ qise version                                # Print version
 | SecurityContextProvider (DSL template rendering) | ✅ Complete |
 | BaselineManager (SHA-256 hash integrity) | ✅ Complete |
 | Soft-Hard Defense Linkage (active_security_rules) | ✅ Complete |
+| Structured SLM Prompts (IS/NOT + few-shot) | ✅ Complete |
+| Dynamic Few-Shot Loading (PromptExampleLoader) | ✅ Complete |
+| Confidence-based SLM Override (<0.65 / ≥0.65) | ✅ Complete |
 | 410 unit + integration + performance tests | ✅ Complete |
 | Desktop App (Tauri 2) | 🔜 Planned |
 

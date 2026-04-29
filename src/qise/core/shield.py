@@ -93,6 +93,15 @@ class Shield:
         for guard in self.pipeline.all_guards:
             guard.set_model_router(self.model_router)
 
+        # Wire example loader into all AI guards
+        try:
+            from qise.data.prompt_loader import PromptExampleLoader
+            example_loader = PromptExampleLoader()
+            for guard in self.pipeline.all_guards:
+                guard.set_example_loader(example_loader)
+        except Exception:
+            pass  # Non-critical: examples are optional
+
     @classmethod
     def from_config(cls, path: str | Path | None = None) -> Shield:
         """Create a Shield from a shield.yaml file.
@@ -182,9 +191,12 @@ class Shield:
         """Build GuardPipeline with enabled guards from config.
 
         Pipeline assignment:
-          Ingress: prompt, reasoning, tool_sanity, context, supply_chain
-          Egress: command, filesystem, network, exfil, resource, tool_policy
+          Ingress: prompt, tool_sanity, context, supply_chain
+          Egress: reasoning, command, filesystem, network, exfil, resource, tool_policy
           Output: credential, audit, output
+
+        ReasoningGuard is cross-cutting — placed first in egress so its
+        threshold_adjustments propagate to subsequent guards.
         """
         pipeline = GuardPipeline()
 
@@ -197,8 +209,14 @@ class Shield:
                 continue
 
             # Assign to pipeline based on guard role
-            if guard_name in ("prompt", "reasoning", "tool_sanity", "context", "supply_chain"):
+            if guard_name in ("prompt", "tool_sanity", "context", "supply_chain"):
                 pipeline.ingress.add_guard(guard)
+            elif guard_name == "reasoning":
+                # Cross-cutting: placed in egress (runs before command/exfil/etc.)
+                # so its threshold_adjustments propagate to subsequent guards.
+                # Also added to output for audit correlation.
+                pipeline.egress.add_guard(guard)
+                pipeline.output.add_guard(guard)
             elif guard_name in ("command", "filesystem", "network", "exfil", "resource", "tool_policy"):
                 pipeline.egress.add_guard(guard)
             elif guard_name in ("credential", "audit", "output"):

@@ -10,13 +10,15 @@ class TestFullPipeline14GuardRegistration:
     def test_all_14_guards_registered(self) -> None:
         s = Shield.from_config()
         names = [g.name for g in s.pipeline.all_guards]
-        assert len(names) == 14
+        # ReasoningGuard is in both egress and output (cross-cutting)
+        # so total count is 15 (14 unique guards + 1 duplicate for cross-cutting)
+        unique_names = set(names)
         expected = {
             "prompt", "reasoning", "tool_sanity", "context", "supply_chain",
             "command", "filesystem", "network", "exfil", "resource", "tool_policy",
             "credential", "audit", "output",
         }
-        assert set(names) == expected
+        assert unique_names == expected
 
     def test_pipeline_assignment(self) -> None:
         s = Shield.from_config()
@@ -25,11 +27,12 @@ class TestFullPipeline14GuardRegistration:
         output = [g.name for g in s.pipeline.output.guards]
 
         assert "prompt" in ingress
-        assert "reasoning" in ingress
+        assert "reasoning" not in ingress  # Moved from ingress to egress+output (cross-cutting)
         assert "tool_sanity" in ingress
         assert "context" in ingress
         assert "supply_chain" in ingress
 
+        assert "reasoning" in egress  # Cross-cutting: runs before command/exfil
         assert "command" in egress
         assert "filesystem" in egress
         assert "network" in egress
@@ -37,6 +40,7 @@ class TestFullPipeline14GuardRegistration:
         assert "resource" in egress
         assert "tool_policy" in egress
 
+        assert "reasoning" in output  # Also in output for audit correlation
         assert "credential" in output
         assert "audit" in output
         assert "output" in output

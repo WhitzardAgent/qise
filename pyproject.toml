@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qise"
-version = "0.1.0"
-description = "AI-first runtime security framework for AI agents — 14 guards, 5 framework adapters, sub-ms rule checks"
+version = "0.2.0"
+description = "AI-first runtime security framework for AI agents — 14 guards, 5 framework adapters, structured SLM prompts, sub-ms rule checks"
 readme = "README.md"
 license = "CC-BY-NC-SA-4.0"
 requires-python = ">=3.11"

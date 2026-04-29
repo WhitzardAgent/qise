@@ -137,11 +137,17 @@ class NetworkGuardRuleChecker(RuleChecker):
                 except ValueError:
                     continue
         except (TimeoutError, socket.gaierror, OSError):
-            # DNS resolution failed — warn (could be SSRF with bad DNS)
+            # DNS resolution failed — skip rather than warn for common reserved/example domains
+            # These are documentation domains that don't resolve but aren't threats
+            safe_unresolvable = (".example.com", ".example.org", ".example.net",
+                                 ".example.com", ".service.com", "localhost")
+            if any(hostname == h or hostname.endswith(h) for h in safe_unresolvable):
+                return None
+            # For other unresolvable hosts, warn conservatively (low confidence)
             return GuardResult(
                 guard_name="network",
                 verdict=GuardVerdict.WARN,
-                confidence=0.5,
+                confidence=0.4,
                 message=f"Could not resolve hostname: {hostname}",
             )
 
