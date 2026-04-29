@@ -60,6 +60,7 @@ def _build_parser() -> argparse.ArgumentParser:
     proxy_start.add_argument("--upstream-key", default=None, help="Upstream LLM API key")
     proxy_start.add_argument("--no-inject", action="store_true", help="Disable security context injection")
     proxy_start.add_argument("--observe", action="store_true", help="Never block, only warn (observe mode)")
+    proxy_start.add_argument("--no-reload", action="store_true", help="Disable config hot-reload")
 
     # qise context
     context_parser = subparsers.add_parser("context", help="Get security context for a tool")
@@ -67,7 +68,8 @@ def _build_parser() -> argparse.ArgumentParser:
     context_parser.add_argument("--tool-args", help="Tool arguments as JSON string", default=None)
 
     # qise guards
-    subparsers.add_parser("guards", help="List registered guards")
+    guards_parser = subparsers.add_parser("guards", help="List registered guards")
+    guards_parser.add_argument("--metrics", action="store_true", help="Show runtime metrics")
 
     # qise version
     subparsers.add_parser("version", help="Print version")
@@ -196,6 +198,12 @@ def _cmd_guards(args: argparse.Namespace) -> int:
         print(f"{guard.name:<20} {pipeline:<10} {guard.primary_strategy:<12} {mode:<10}")
 
     print(f"\nTotal: {len(shield.pipeline.all_guards)} guards")
+
+    if args.metrics:
+        metrics = shield.get_metrics()
+        print("\n--- Metrics ---")
+        print(json.dumps(metrics, indent=2, default=str))
+
     return 0
 
 
@@ -242,10 +250,26 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
 
     server = ProxyServer(shield, proxy_config)
 
+    # Config hot-reload (enabled by default, disabled with --no-reload)
+    watcher = None
+    if not args.no_reload:
+        try:
+            from qise.core.config_watcher import ConfigWatcher
+            config_path = args.config or "shield.yaml"
+            from pathlib import Path
+            if Path(config_path).exists():
+                watcher = ConfigWatcher(config_path, shield.reconfigure)
+        except Exception:
+            pass  # Non-critical: hot-reload is optional
+
     async def _run() -> None:
+        if watcher:
+            watcher.start()
         await server.start()
         print(f"Qise proxy running on {proxy_config.listen_host}:{proxy_config.listen_port}")
         print(f"Upstream: {proxy_config.upstream_base_url or '(not configured)'}")
+        if watcher and watcher.is_running:
+            print(f"Config hot-reload: watching {watcher.config_path}")
         print("Press Ctrl+C to stop")
         try:
             # Run forever until interrupted
@@ -263,6 +287,8 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
             await stop_event.wait()
         finally:
             await server.stop()
+            if watcher:
+                watcher.stop()
 
     try:
         asyncio.run(_run())

@@ -88,6 +88,10 @@ class AIGuardBase(ABC):
         """Inject the PromptExampleLoader for dynamic few-shot examples."""
         self._example_loader = loader
 
+    def set_metrics(self, metrics: Any) -> None:
+        """Inject the GuardMetrics instance for recording check results."""
+        self._metrics = metrics
+
     def check(self, context: GuardContext) -> GuardResult:
         """Three-layer decision: rule fast-path → SLM → LLM → rule fallback.
 
@@ -103,7 +107,17 @@ class AIGuardBase(ABC):
         Rule WARN with confidence >= 0.65 cannot be overridden.
         """
         start = time.monotonic()
+        result = self._check_impl(context)
+        # Record metrics if available
+        if hasattr(self, "_metrics") and self._metrics is not None:
+            self._metrics.record_guard_check(
+                self.name, str(result.verdict), result.latency_ms,
+            )
+        return result
 
+    def _check_impl(self, context: GuardContext) -> GuardResult:
+        """Internal implementation of three-layer decision flow."""
+        start = time.monotonic()
         # Layer 0: Deterministic rule fast-path (0ms overhead)
         rule_warn: GuardResult | None = None
         if self.rule_fallback is not None:

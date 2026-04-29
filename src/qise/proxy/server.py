@@ -193,9 +193,16 @@ class ProxyServer:
 
         if response_decision.action == "warn":
             headers = {"X-Qise-Warnings": "; ".join(response_decision.warnings[:5])}
+            # Add metrics header if available
+            if hasattr(self._shield, "metrics"):
+                headers["X-Qise-Metrics"] = self._shield.metrics.brief()
             return web.json_response(response_body, headers=headers)
 
-        return web.json_response(response_body)
+        # Add metrics header to normal responses if available
+        resp_headers = {}
+        if hasattr(self._shield, "metrics"):
+            resp_headers["X-Qise-Metrics"] = self._shield.metrics.brief()
+        return web.json_response(response_body, headers=resp_headers)
 
     async def _handle_streaming(
         self,

@@ -55,6 +55,9 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+proxy = [
+    "watchfiles>=0.20",
+]
 
 [project.scripts]
 qise = "qise.cli:main"

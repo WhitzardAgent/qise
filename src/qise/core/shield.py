@@ -12,6 +12,7 @@ from typing import Any
 from qise.core.config import ShieldConfig
 from qise.core.event_logger import EventLogger
 from qise.core.guard_base import AIGuardBase
+from qise.core.metrics import GuardMetrics
 from qise.core.models import GuardContext, PipelineResult
 from qise.core.pipeline import GuardPipeline
 from qise.core.session_tracker import SessionTracker
@@ -86,12 +87,19 @@ class Shield:
         )
         self.baseline_manager = baseline_manager or self._build_baseline_manager()
 
+        # Build metrics collector
+        self.metrics = GuardMetrics()
+
         # Build guards and pipeline
         self.pipeline = pipeline or self._build_guards()
 
-        # Wire model router into all guards
+        # Wire model router and metrics into all guards
         for guard in self.pipeline.all_guards:
             guard.set_model_router(self.model_router)
+            guard.set_metrics(self.metrics)
+
+        # Wire metrics into pipeline
+        self.pipeline.set_metrics(self.metrics)
 
         # Wire example loader into all AI guards
         try:
@@ -159,6 +167,59 @@ class Shield:
     ) -> str:
         """Get rendered security context for injection into agent observation."""
         return self.context_provider.render_for_agent(tool_name, tool_args)
+
+    def reconfigure(self, config: ShieldConfig) -> None:
+        """Hot-reload the shield with a new configuration.
+
+        Rebuilds guards, pipeline, and model router while preserving
+        session state. Used by ConfigWatcher for live config updates.
+
+        Args:
+            config: New ShieldConfig to apply.
+        """
+        self.config = config
+
+        # Rebuild model router (may change SLM/LLM endpoints)
+        self.model_router = self._build_model_router()
+
+        # Rebuild context provider (may change data paths)
+        self.context_provider = self._build_context_provider()
+
+        # Rebuild pattern loader
+        self.pattern_loader = self._build_pattern_loader()
+
+        # Rebuild baseline manager
+        self.baseline_manager = self._build_baseline_manager()
+
+        # Rebuild guards and pipeline
+        self.pipeline = self._build_guards()
+
+        # Wire model router and metrics into all guards
+        for guard in self.pipeline.all_guards:
+            guard.set_model_router(self.model_router)
+            guard.set_metrics(self.metrics)
+
+        # Wire example loader into all AI guards
+        try:
+            from qise.data.prompt_loader import PromptExampleLoader
+            example_loader = PromptExampleLoader()
+            for guard in self.pipeline.all_guards:
+                guard.set_example_loader(example_loader)
+        except Exception:
+            pass
+
+        self.event_logger.log_event(
+            "config_reloaded",
+            {"message": "Shield reconfigured with new config"},
+        )
+
+    def get_metrics(self) -> dict:
+        """Return current runtime metrics as a dict.
+
+        Includes guard invocation counts, verdict distributions, latency
+        stats, and pipeline-level counters.
+        """
+        return self.metrics.snapshot()
 
     # ------------------------------------------------------------------
     # Internal builders

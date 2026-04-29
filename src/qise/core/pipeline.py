@@ -14,6 +14,7 @@ Execution rules:
 from __future__ import annotations
 
 from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 from qise.core.guard_base import AIGuardBase
 from qise.core.models import (
@@ -145,6 +146,11 @@ class GuardPipeline:
         self.ingress = SubPipeline(PipelineKind.INGRESS)
         self.egress = SubPipeline(PipelineKind.EGRESS)
         self.output = SubPipeline(PipelineKind.OUTPUT)
+        self._metrics: Any = None
+
+    def set_metrics(self, metrics: Any) -> None:
+        """Inject the GuardMetrics instance for recording pipeline runs."""
+        self._metrics = metrics
 
     @property
     def all_guards(self) -> list[AIGuardBase]:
@@ -155,19 +161,28 @@ class GuardPipeline:
         self, context: GuardContext, guard_modes: dict[str, str] | None = None
     ) -> PipelineResult:
         """Run Ingress pipeline for incoming data checks."""
-        return self.ingress.run(context, guard_modes)
+        result = self.ingress.run(context, guard_modes)
+        if self._metrics is not None:
+            self._metrics.record_pipeline_run("ingress", blocked=result.should_block)
+        return result
 
     def run_egress(
         self, context: GuardContext, guard_modes: dict[str, str] | None = None
     ) -> PipelineResult:
         """Run Egress pipeline for outgoing action checks."""
-        return self.egress.run(context, guard_modes)
+        result = self.egress.run(context, guard_modes)
+        if self._metrics is not None:
+            self._metrics.record_pipeline_run("egress", blocked=result.should_block)
+        return result
 
     def run_output(
         self, context: GuardContext, guard_modes: dict[str, str] | None = None
     ) -> PipelineResult:
         """Run Output pipeline for audit and leak detection."""
-        return self.output.run(context, guard_modes)
+        result = self.output.run(context, guard_modes)
+        if self._metrics is not None:
+            self._metrics.record_pipeline_run("output", blocked=result.should_block)
+        return result
 
     def run_all(
         self, context: GuardContext, guard_modes: dict[str, str] | None = None
