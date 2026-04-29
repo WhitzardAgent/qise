@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
+import re
+
 import yaml
 from pydantic import BaseModel, Field
 
@@ -27,6 +29,8 @@ class IntegrationProxyConfig(BaseModel):
     target_agents: list[str] = Field(default_factory=lambda: ["claude_code"])
     auto_takeover: bool = True
     crash_recovery: bool = True
+    upstream_url: str = ""
+    upstream_api_key: str = ""
 
 
 class IntegrationConfig(BaseModel):
@@ -39,6 +43,8 @@ class GuardConfig(BaseModel):
     mode: Literal["observe", "enforce", "off"] = "observe"
     slm_confidence_threshold: float | None = None
     threshold_adjustment_factor: float | None = None
+    skip_slm_on_rule_pass: bool | None = None
+    slm_override_rule_warn_threshold: float | None = None
 
 
 class GuardsConfig(BaseModel):
@@ -150,9 +156,27 @@ class ShieldConfig(BaseModel):
         else:
             raw = {}
 
+        # Expand ${VAR} references in string values using environment variables
+        raw = cls._expand_env_vars(raw)
+
         config = cls(**raw)
         config._apply_env_overrides()
         return config
+
+    @staticmethod
+    def _expand_env_vars(obj: Any) -> Any:
+        """Recursively expand ${VAR} references in string values."""
+        if isinstance(obj, str):
+            return re.sub(
+                r"\$\{(\w+)\}",
+                lambda m: os.getenv(m.group(1), m.group(0)),
+                obj,
+            )
+        if isinstance(obj, dict):
+            return {k: ShieldConfig._expand_env_vars(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [ShieldConfig._expand_env_vars(v) for v in obj]
+        return obj
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ShieldConfig:
@@ -179,16 +203,24 @@ class ShieldConfig(BaseModel):
 
         if val := os.getenv("QISE_PROXY_PORT"):
             self.integration.proxy.port = int(val)
+        if val := os.getenv("QISE_PROXY_UPSTREAM_URL"):
+            self.integration.proxy.upstream_url = val.rstrip("/")
+        if val := os.getenv("QISE_PROXY_UPSTREAM_API_KEY"):
+            self.integration.proxy.upstream_api_key = val
 
         if val := os.getenv("QISE_SLM_BASE_URL"):
             self.models.slm.base_url = val
         if val := os.getenv("QISE_SLM_MODEL"):
             self.models.slm.model = val
+        if val := os.getenv("QISE_SLM_API_KEY"):
+            self.models.slm.api_key = val
 
         if val := os.getenv("QISE_LLM_BASE_URL"):
             self.models.llm.base_url = val
         if val := os.getenv("QISE_LLM_MODEL"):
             self.models.llm.model = val
+        if val := os.getenv("QISE_LLM_API_KEY"):
+            self.models.llm.api_key = val
 
         if val := os.getenv("QISE_LOG_LEVEL"):
             self.logging.level = val  # type: ignore[assignment]

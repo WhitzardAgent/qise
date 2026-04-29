@@ -75,6 +75,8 @@ class AIGuardBase(ABC):
     llm_prompt_template: str | None = None
     rule_fallback: RuleChecker | None = None
     slm_confidence_threshold: float = 0.7
+    skip_slm_on_rule_pass: bool = False
+    slm_override_rule_warn_threshold: float = 0.65
 
     # Set by Shield during initialization
     _model_router: ModelRouter | None = None
@@ -102,9 +104,10 @@ class AIGuardBase(ABC):
         isolation (low confidence), SLM can override it since SLM provides
         actual content analysis.
 
-        In practice: rule WARN with confidence < 0.65 can be overridden by
-        SLM PASS (trust boundary isolation is a precaution, not a finding).
-        Rule WARN with confidence >= 0.65 cannot be overridden.
+        In practice: rule WARN with confidence < slm_override_rule_warn_threshold
+        can be overridden by SLM PASS (trust boundary isolation is a precaution,
+        not a finding). Rule WARN with confidence >= slm_override_rule_warn_threshold
+        cannot be overridden.
         """
         start = time.monotonic()
         result = self._check_impl(context)
@@ -126,10 +129,14 @@ class AIGuardBase(ABC):
             if rule_result.verdict == GuardVerdict.BLOCK:
                 rule_result.latency_ms = _elapsed_ms(start)
                 return rule_result
-            # For rule-only guards, rule PASS also short-circuits
-            # For AI-first guards, rule PASS does NOT short-circuit — SLM gets
-            # final say (rules may miss semantic attacks like base64 exfil)
-            if rule_result.verdict == GuardVerdict.PASS and self.primary_strategy == "rules":
+            # For rule-only guards, rule PASS always short-circuits
+            # For AI-first guards, rule PASS short-circuits only when
+            # skip_slm_on_rule_pass is True (trading accuracy for latency)
+            # Otherwise SLM gets final say (rules may miss semantic attacks
+            # like base64 exfil)
+            if rule_result.verdict == GuardVerdict.PASS and (
+                self.primary_strategy == "rules" or self.skip_slm_on_rule_pass
+            ):
                 rule_result.latency_ms = _elapsed_ms(start)
                 return rule_result
             # Save WARN result — SLM may or may not be able to downgrade
@@ -158,7 +165,7 @@ class AIGuardBase(ABC):
                     # Low-confidence rule WARNs (trust boundary isolation, < 0.65)
                     # can be overridden since SLM provides actual content analysis.
                     if rule_warn is not None and slm_result.verdict == GuardVerdict.PASS:
-                        if rule_warn.confidence >= 0.65:
+                        if rule_warn.confidence >= self.slm_override_rule_warn_threshold:
                             return rule_warn
                     return slm_result
                 # ESCALATE → fall through to LLM

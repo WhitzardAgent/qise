@@ -1,0 +1,20 @@
+# Qise Proxy — Rust-based high-performance HTTP reverse proxy
+# Multi-stage build: compile Rust in builder, run in minimal image
+
+FROM rust:1.82-slim AS builder
+WORKDIR /app
+# Copy Cargo files first for dependency caching
+COPY src-proxy/Cargo.toml src-proxy/Cargo.lock* ./
+# Create dummy main.rs to build dependencies
+RUN mkdir src && echo 'fn main() {}' > src/main.rs
+RUN cargo build --release 2>/dev/null || true
+# Now copy actual source
+COPY src-proxy/src/ src/
+RUN touch src/main.rs && cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/qise-proxy /usr/local/bin/
+EXPOSE 8822
+CMD ["qise-proxy"]

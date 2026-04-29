@@ -94,11 +94,61 @@ def _build_headers(api_key: str | None) -> dict[str, str]:
     return headers
 
 
+def _extract_content_from_response(data: dict[str, Any]) -> str:
+    """Extract content from OpenAI Chat Completions response.
+
+    Handles thinking-mode models (e.g., Qwen3.x) where the actual output
+    is in `content` but the model also produces `reasoning_content`.
+    If `content` is empty (thinking used all tokens), falls back to
+    extracting a verdict from `reasoning_content`.
+    """
+    message = data.get("choices", [{}])[0].get("message", {})
+    content = message.get("content", "")
+
+    if content and content.strip():
+        return content
+
+    # Content is empty — model may have used all tokens for thinking.
+    # Try to extract useful info from reasoning_content.
+    reasoning = message.get("reasoning_content", "")
+    if reasoning:
+        # The reasoning often contains the intended JSON output.
+        # Try to extract it.
+        return _extract_json_from_reasoning(reasoning)
+
+    return content
+
+
+def _extract_json_from_reasoning(text: str) -> str:
+    """Try to extract JSON output from a thinking/reasoning block.
+
+    When models run out of tokens during thinking, the actual JSON
+    response is often embedded in the reasoning. We look for patterns
+    like "Final Answer:" or the last JSON object.
+    """
+    # Look for common separators before the final answer
+    for marker in ["Final Answer:", "Final Output:", "Output:", "**Output:**"]:
+        idx = text.rfind(marker)
+        if idx >= 0:
+            remainder = text[idx + len(marker):].strip()
+            if remainder:
+                return remainder
+
+    # Try to find the last JSON object in the reasoning
+    import re
+    matches = re.findall(r'\{[^{}]*"verdict"[^{}]*\}', text, re.DOTALL)
+    if matches:
+        return matches[-1]
+
+    # Fallback: return empty — will be handled by _parse_json_response
+    return ""
+
+
 def _build_chat_payload(
     model: str,
     prompt: str,
     temperature: float = 0.1,
-    max_tokens: int = 512,
+    max_tokens: int = 2048,
 ) -> dict[str, Any]:
     """Build OpenAI Chat Completions request payload."""
     payload: dict[str, Any] = {
@@ -205,7 +255,7 @@ class ModelRouter:
 
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = _extract_content_from_response(data)
         parsed = _parse_json_response(content)
         parsed["_latency_ms"] = latency_ms
         parsed["_model"] = config.model
@@ -238,7 +288,7 @@ class ModelRouter:
 
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = _extract_content_from_response(data)
         finish_reason = data.get("choices", [{}])[0].get("finish_reason")
 
         return ModelResponse(
@@ -309,7 +359,7 @@ class ModelRouter:
 
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = _extract_content_from_response(data)
         parsed = _parse_json_response(content)
         parsed["_latency_ms"] = latency_ms
         parsed["_model"] = config.model
@@ -359,7 +409,7 @@ class ModelRouter:
 
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = _extract_content_from_response(data)
         finish_reason = data.get("choices", [{}])[0].get("finish_reason")
 
         return ModelResponse(

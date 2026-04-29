@@ -4,6 +4,7 @@ Subcommands:
     qise check <tool_name> <tool_args_json>  — Single security check
     qise serve                                — Start MCP Server
     qise proxy start                          — Start HTTP proxy server
+    qise bridge start                         — Start Python Bridge server
     qise context <tool_name>                  — Get security context text
     qise guards                               — List registered guards
     qise version                              — Print version
@@ -96,6 +97,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # qise adapters openai-agents
     adapters_subparsers.add_parser("openai-agents", help="Show OpenAI Agents SDK integration code snippet")
+
+    # qise bridge
+    from qise.bridge.cli import add_bridge_parser
+    add_bridge_parser(subparsers)
 
     return parser
 
@@ -311,6 +316,12 @@ def _cmd_init(args: argparse.Namespace) -> int:
     print(f"Created {config_path}")
     print("Edit this file to customize guard modes, model endpoints, and data paths.")
     return 0
+
+
+def _cmd_bridge(args: argparse.Namespace) -> int:
+    """Start the Python Bridge server."""
+    from qise.bridge.cli import cmd_bridge
+    return cmd_bridge(args)
 
 
 def _default_shield_yaml() -> str:
@@ -655,6 +666,7 @@ def main() -> None:
         "check": _cmd_check,
         "serve": _cmd_serve,
         "proxy": _cmd_proxy,
+        "bridge": _cmd_bridge,
         "init": _cmd_init,
         "adapters": _cmd_adapters,
         "context": _cmd_context,

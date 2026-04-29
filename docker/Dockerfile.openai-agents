@@ -1,0 +1,22 @@
+# OpenAI Agents SDK + Qise Guardrails
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install OpenAI Agents SDK from source
+COPY frameworks/openai-agents-python/ /tmp/openai-agents/
+RUN pip install --no-cache-dir /tmp/openai-agents \
+    && rm -rf /tmp/openai-agents
+
+# Install Qise from source
+COPY . /qise-src
+RUN pip install --no-cache-dir /qise-src \
+    && rm -rf /qise-src
+
+# Copy sandbox test scripts
+COPY docker/sandbox/test_openai_agents.py /opt/qise-tests/test_openai_agents.py
+
+WORKDIR /opt/qise-tests
+
+CMD ["python", "-m", "pytest", "test_openai_agents.py", "-v"]

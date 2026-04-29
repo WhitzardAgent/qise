@@ -1,0 +1,136 @@
+version: "3.9"
+
+services:
+  # Qise Bridge — Python HTTP server for Guard Pipeline + SLM
+  qise-bridge:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.qise-bridge
+    env_file: .env
+    environment:
+      QISE_CONFIG: /opt/qise/shield.yaml
+      # SLM (SiliconFlow) for Guard Pipeline
+      QISE_SLM_API_KEY: ${SILICONFLOW_API_KEY}
+      QISE_LLM_API_KEY: ${SILICONFLOW_API_KEY}
+      QISE_SLM_BASE_URL: ${SILICONFLOW_BASE_URL}
+      QISE_SLM_MODEL: ${SILICONFLOW_MODEL}
+      QISE_BRIDGE_PORT: 8823
+    volumes:
+      - ./shield.yaml:/opt/qise/shield.yaml:ro
+      - ../../data:/opt/qise/data:ro
+    networks:
+      - sandbox
+    ports:
+      - "8823:8823"
+    mem_limit: 1g
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8823/v1/bridge/health', timeout=5); r.raise_for_status()"]
+      interval: 10s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+
+  # Qise Proxy — Rust-based high-performance HTTP reverse proxy
+  qise-proxy:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.qise-proxy
+    environment:
+      QISE_PROXY_PORT: 8822
+      QISE_PROXY_HOST: "0.0.0.0"
+      QISE_PROXY_UPSTREAM_URL: ${SII_BASE_URL}
+      QISE_PROXY_UPSTREAM_API_KEY: ${SII_API_KEY}
+      QISE_BRIDGE_URL: http://qise-bridge:8823
+      RUST_LOG: qise_proxy=info
+    networks:
+      - sandbox
+    ports:
+      - "8822:8822"
+    depends_on:
+      qise-bridge:
+        condition: service_healthy
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8822/v1/models"]
+      interval: 10s
+      timeout: 15s
+      retries: 5
+      start_period: 15s
+
+  # Hermes Agent + Qise plugin
+  hermes:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.hermes
+    env_file: .env
+    environment:
+      HERMES_MODEL_PROVIDER: custom
+      HERMES_MODEL_BASE_URL: http://qise-proxy:8822/v1
+      HERMES_MODEL_DEFAULT: ${SII_MODEL}
+      HERMES_API_KEY: ${SII_API_KEY}
+      QISE_CONFIG: /opt/qise/shield.yaml
+    volumes:
+      - ./shield.yaml:/opt/qise/shield.yaml:ro
+    networks:
+      - sandbox
+    depends_on:
+      qise-proxy:
+        condition: service_healthy
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  # NexAU Agent + Qise middleware
+  nexau:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.nexau
+    env_file: .env
+    environment:
+      NEXAU_LLM_BASE_URL: http://qise-proxy:8822/v1
+      NEXAU_LLM_MODEL: ${SII_MODEL}
+      NEXAU_LLM_API_KEY: ${SII_API_KEY}
+      QISE_CONFIG: /opt/qise/shield.yaml
+    volumes:
+      - ./shield.yaml:/opt/qise/shield.yaml:ro
+    networks:
+      - sandbox
+    depends_on:
+      qise-proxy:
+        condition: service_healthy
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  # OpenAI Agents SDK + Qise guardrails
+  openai-agents:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.openai-agents
+    env_file: .env
+    environment:
+      OPENAI_API_BASE: http://qise-proxy:8822/v1
+      OPENAI_API_KEY: ${SII_API_KEY}
+      OPENAI_MODEL: ${SII_MODEL}
+      QISE_CONFIG: /opt/qise/shield.yaml
+    volumes:
+      - ./shield.yaml:/opt/qise/shield.yaml:ro
+    networks:
+      - sandbox
+    depends_on:
+      qise-proxy:
+        condition: service_healthy
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  sandbox:
+    driver: bridge
+    internal: false  # must be false for outbound to SiliconFlow + SII
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"

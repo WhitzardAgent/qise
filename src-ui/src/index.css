@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Backgrounds */
+  --bg-deep: #07080a;
+  --bg-surface: #101111;
+  --bg-card: #1b1c1e;
+
+  /* Text */
+  --text-primary: #f9f9f9;
+  --text-secondary: #cecece;
+  --text-tertiary: #9c9c9d;
+  --text-dim: #6a6b6c;
+
+  /* Brand & Semantic */
+  --qise-red: #FF6363;
+  --qise-blue: #55b3ff;
+  --qise-green: #5fc992;
+  --qise-yellow: #ffbc33;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+
+  /* Font */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'GeistMono', ui-monospace, monospace;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Raycast-style card */
+.qise-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+/* Raycast-style pill button */
+.qise-btn-primary {
+  border-radius: 86px;
+  padding: 8px 20px;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+
+.qise-btn-primary-active {
+  background: hsla(0, 0%, 100%, 0.815);
+  color: #18191a;
+}
+
+.qise-btn-primary-inactive {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.qise-btn-primary:hover {
+  opacity: 0.6;
+}
+
+/* Status glow effects */
+.glow-green {
+  box-shadow: 0 0 12px hsla(151, 59%, 59%, 0.4);
+}
+
+.glow-yellow {
+  box-shadow: 0 0 12px hsla(43, 100%, 60%, 0.4);
+}
+
+.glow-red {
+  box-shadow: 0 0 12px hsla(0, 100%, 69%, 0.4);
+}
+
+/* Verdict badge */
+.badge-pass {
+  background: var(--bg-card);
+  color: var(--qise-green);
+  border-left: 3px solid var(--qise-green);
+  padding: 2px 8px;
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.badge-warn {
+  background: var(--bg-card);
+  color: var(--qise-yellow);
+  border-left: 3px solid var(--qise-yellow);
+  padding: 2px 8px;
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.badge-block {
+  background: var(--bg-card);
+  color: var(--qise-red);
+  border-left: 3px solid var(--qise-red);
+  padding: 2px 8px;
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* Double-ring shadow for event log */
+.shadow-double-ring {
+  box-shadow:
+    rgb(27, 28, 30) 0 0 0 1px,
+    rgb(7, 8, 10) 0 0 0 1px inset;
+}

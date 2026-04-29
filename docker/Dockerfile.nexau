@@ -1,0 +1,22 @@
+# NexAU Agent + Qise Middleware
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install NexAU from source
+COPY frameworks/NexAU/ /tmp/nexau/
+RUN pip install --no-cache-dir /tmp/nexau \
+    && rm -rf /tmp/nexau
+
+# Install Qise from source
+COPY . /qise-src
+RUN pip install --no-cache-dir /qise-src \
+    && rm -rf /qise-src
+
+# Copy sandbox test scripts
+COPY docker/sandbox/test_nexau.py /opt/qise-tests/test_nexau.py
+
+WORKDIR /opt/qise-tests
+
+CMD ["python", "-m", "pytest", "test_nexau.py", "-v"]

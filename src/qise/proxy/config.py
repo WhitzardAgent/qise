@@ -52,6 +52,8 @@ class ProxyConfig(BaseModel):
         proxy_cfg = shield_config.integration.proxy
         config = cls(
             listen_port=proxy_cfg.port,
+            upstream_base_url=proxy_cfg.upstream_url.rstrip("/") if proxy_cfg.upstream_url else "",
+            upstream_api_key=proxy_cfg.upstream_api_key,
         )
         config._apply_env_overrides()
         return config

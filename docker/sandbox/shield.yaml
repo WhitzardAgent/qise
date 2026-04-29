@@ -1,0 +1,85 @@
+version: "1.0"
+
+integration:
+  mode: proxy
+  proxy:
+    port: 8822
+    # Upstream LLM API: Agent requests are forwarded here
+    # Configured via QISE_PROXY_UPSTREAM_URL / QISE_PROXY_UPSTREAM_API_KEY env vars
+    upstream_url: "https://ekkmopeh8ecgccbjjb9johhhd5dcabcc.openapi-sj.sii.edu.cn/v1"
+    upstream_api_key: "${SII_API_KEY}"
+    target_agents:
+      - hermes
+      - nexau
+      - openai-agents
+    auto_takeover: true
+    crash_recovery: true
+
+# Model config — SLM for Guard Pipeline (SiliconFlow Qwen3-8B)
+# api_key is set via QISE_SLM_API_KEY env var
+# base_url and model can also be overridden via QISE_SLM_BASE_URL / QISE_SLM_MODEL
+models:
+  slm:
+    base_url: "https://api.siliconflow.cn/v1"
+    model: "Qwen/Qwen3-8B"
+    timeout_ms: 30000
+  llm:
+    base_url: "https://api.siliconflow.cn/v1"
+    model: "Qwen/Qwen3-8B"
+    timeout_ms: 60000
+
+guards:
+  enabled:
+    - prompt
+    - tool_sanity
+    - context
+    - supply_chain
+    - reasoning
+    - command
+    - filesystem
+    - network
+    - exfil
+    - resource
+    - tool_policy
+    - credential
+    - audit
+    - output
+  config:
+    prompt:
+      mode: enforce
+    tool_sanity:
+      mode: enforce
+    context:
+      mode: enforce
+    supply_chain:
+      mode: enforce
+    reasoning:
+      mode: enforce
+    command:
+      mode: enforce
+    filesystem:
+      mode: enforce
+    network:
+      mode: enforce
+    exfil:
+      mode: enforce
+    resource:
+      mode: enforce
+    tool_policy:
+      mode: enforce
+    credential:
+      mode: enforce
+    audit:
+      mode: enforce
+    output:
+      mode: enforce
+
+data:
+  threat_patterns_dir: "./data/threat_patterns"
+  security_contexts_dir: "./data/security_contexts"
+  baselines_dir: "./data/baselines"
+
+logging:
+  level: INFO
+  format: json
+  output: stderr

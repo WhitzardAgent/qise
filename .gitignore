@@ -53,3 +53,15 @@ data/baselines/
 
 # Logs
 *.log
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+src-proxy/target/
+
+# Node.js / Frontend
+src-ui/node_modules/
+src-ui/dist/
+
+# Qise runtime data
+.qise/

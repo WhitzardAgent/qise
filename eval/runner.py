@@ -78,12 +78,38 @@ class QiseEvaluator:
 
     def evaluate_dataset(self, samples: list[EvalSample]) -> EvalReport:
         """Run all samples, compute precision/recall/F1/FPR."""
+        import signal
         results: list[EvalResult] = []
         for i, sample in enumerate(samples):
-            if (i + 1) % 100 == 0:
-                print(f"  Progress: {i + 1}/{len(samples)}")
-            result = self._run_sample(sample)
-            results.append(result)
+            # Per-sample timeout (120s) to prevent SLM hangs
+            def _timeout_handler(signum, frame):
+                raise TimeoutError(f"Sample {sample.id} timed out")
+            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(120)
+            try:
+                result = self._run_sample(sample)
+                results.append(result)
+            except TimeoutError as exc:
+                print(f"  TIMEOUT: {sample.id}", flush=True)
+                results.append(EvalResult(
+                    sample_id=sample.id, source=sample.source,
+                    category=sample.category, expected=sample.expected_verdict,
+                    actual="pass", correct=False,
+                    guard_verdicts={}, blocked_by="timeout",
+                ))
+            except Exception as exc:
+                print(f"  ERROR: {sample.id}: {exc}", flush=True)
+                results.append(EvalResult(
+                    sample_id=sample.id, source=sample.source,
+                    category=sample.category, expected=sample.expected_verdict,
+                    actual="pass", correct=False,
+                    guard_verdicts={}, blocked_by=f"error:{exc}",
+                ))
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+            if (i + 1) % 5 == 0 or (i + 1) == len(samples):
+                print(f"  Progress: {i + 1}/{len(samples)}", flush=True)
         return EvalReport(results=results, mode=self.mode)
 
     def compare_modes(self, samples: list[EvalSample]) -> ComparisonReport:

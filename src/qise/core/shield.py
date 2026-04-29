@@ -296,36 +296,43 @@ class Shield:
 
         # Pass shared resources to guards that need them
         if guard_name == "prompt":
-            return factory(pattern_loader=self.pattern_loader)
-
-        if guard_name == "audit":
-            return factory(
+            guard = factory(pattern_loader=self.pattern_loader)
+        elif guard_name == "audit":
+            guard = factory(
                 session_tracker=self.session_tracker,
                 event_logger=self.event_logger,
             )
-
-        if guard_name == "tool_sanity":
-            return factory(
+        elif guard_name == "tool_sanity":
+            guard = factory(
                 baseline_manager=self.baseline_manager,
                 pattern_loader=self.pattern_loader,
             )
-
-        if guard_name == "context":
-            return factory(
+        elif guard_name == "context":
+            guard = factory(
                 baseline_manager=self.baseline_manager,
                 pattern_loader=self.pattern_loader,
             )
-
-        if guard_name == "supply_chain":
-            return factory(baseline_manager=self.baseline_manager)
-
-        if guard_name == "tool_policy":
-            return factory(
+        elif guard_name == "supply_chain":
+            guard = factory(baseline_manager=self.baseline_manager)
+        elif guard_name == "tool_policy":
+            guard = factory(
                 profiles=self._build_tool_policy_profiles(),
                 active_profile=self.config.tool_policy.active_profile,
             )
+        else:
+            guard = factory()
 
-        return factory()
+        # Wire per-guard config into guard instance
+        gc = self.config.guards.config.get(guard_name)
+        if gc is not None:
+            if gc.slm_confidence_threshold is not None:
+                guard.slm_confidence_threshold = gc.slm_confidence_threshold
+            if gc.skip_slm_on_rule_pass is not None:
+                guard.skip_slm_on_rule_pass = gc.skip_slm_on_rule_pass
+            if gc.slm_override_rule_warn_threshold is not None:
+                guard.slm_override_rule_warn_threshold = gc.slm_override_rule_warn_threshold
+
+        return guard
 
     def _build_tool_policy_profiles(self) -> dict[str, ToolPolicyProfile]:
         """Build tool policy profiles from config."""

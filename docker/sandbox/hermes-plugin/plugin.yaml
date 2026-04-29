@@ -1,0 +1,9 @@
+name: qise-security
+version: 0.2.0
+description: "Qise runtime security for Hermes"
+kind: standalone
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
+  - transform_tool_result
+  - post_llm_call

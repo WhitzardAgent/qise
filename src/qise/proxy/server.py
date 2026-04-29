@@ -152,8 +152,11 @@ class ProxyServer:
         # Step 1: Parse request
         parsed_request = self._request_parser.parse(body)
 
-        # Step 2: Request interception
-        request_decision = self._interceptor.intercept_request(parsed_request, body)
+        # Step 2: Request interception (run in thread to avoid blocking event loop)
+        import asyncio
+        request_decision = await asyncio.to_thread(
+            self._interceptor.intercept_request, parsed_request, body
+        )
 
         if request_decision.action == "block" and self._config.block_on_guard_block:
             logger.warning("Request BLOCKED: %s", request_decision.block_reason)
@@ -182,9 +185,12 @@ class ProxyServer:
         except Exception:
             return upstream_response
 
-        # Step 7: Response interception
+        # Step 7: Response interception (run in thread to avoid blocking event loop)
+        import asyncio
         parsed_response = self._response_parser.parse(response_body)
-        response_decision = self._interceptor.intercept_response(parsed_response, response_body)
+        response_decision = await asyncio.to_thread(
+            self._interceptor.intercept_response, parsed_response, response_body
+        )
 
         # Step 8: Return response
         if response_decision.action == "block" and self._config.block_on_guard_block:

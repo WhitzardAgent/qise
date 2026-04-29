@@ -1,0 +1,24 @@
+# Hermes Agent + Qise Security Plugin
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Hermes from source
+COPY frameworks/hermes-agent/ /tmp/hermes-agent/
+RUN pip install --no-cache-dir /tmp/hermes-agent"[all,dev]" \
+    && rm -rf /tmp/hermes-agent
+
+# Install Qise from source
+COPY . /qise-src
+RUN pip install --no-cache-dir /qise-src \
+    && rm -rf /qise-src
+
+# Register Qise as Hermes plugin
+RUN mkdir -p /root/.hermes/plugins/qise-security
+COPY docker/sandbox/hermes-plugin/plugin.yaml /root/.hermes/plugins/qise-security/
+COPY docker/sandbox/hermes-plugin/__init__.py /root/.hermes/plugins/qise-security/
+
+WORKDIR /root
+
+CMD ["hermes-agent"]

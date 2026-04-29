@@ -1,0 +1,22 @@
+[package]
+name = "qise-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "Qise Rust Proxy — high-performance HTTP reverse proxy for AI agent security"
+
+[dependencies]
+axum = "0.8"
+hyper = { version = "1.0", features = ["client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
+hyper-rustls = "0.27"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
+tokio-stream = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+bytes = "1"
+futures = "0.3"

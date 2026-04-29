@@ -6,9 +6,10 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-green.svg)](LICENSE)
-[![Tests: 410 passed](https://img.shields.io/badge/Tests-410%20passed-brightgreen.svg)](tests/)
+[![Tests: 439 passed](https://img.shields.io/badge/Tests-439%20passed-brightgreen.svg)](tests/)
 [![Guards: 14](https://img.shields.io/badge/Guards-14-orange.svg)](src/qise/guards/)
 [![Adapters: 5](https://img.shields.io/badge/Adapters-5-purple.svg)](src/qise/adapters/)
+[![Desktop: Tauri 2](https://img.shields.io/badge/Desktop-Tauri%202-blue.svg)](src-tauri/)
 
 [English](#overview) | [中文](./README_CN.md)
 
@@ -170,7 +171,7 @@ qise guards
 Start a local HTTP proxy that intercepts all Agent↔LLM traffic:
 
 ```bash
-# Start proxy server
+# Start proxy server (Rust, high-performance)
 qise proxy start --port 8822 --upstream https://api.openai.com
 
 # Point your agent at the proxy
@@ -178,6 +179,28 @@ export OPENAI_API_BASE="http://localhost:8822/v1"
 ```
 
 The proxy intercepts requests/responses in real-time, running all 14 guards on tool calls, injection attempts, and output leaks — with **SSE streaming support** for zero-latency text passthrough.
+
+### Desktop App (Zero-Code, One-Click)
+
+The Qise desktop app provides a one-click security toggle with real-time monitoring:
+
+```bash
+# Build and run the desktop app
+cd src-tauri && cargo tauri dev
+```
+
+**Features:**
+- **System Tray**: One-click protection toggle, status indicator
+- **Guard Dashboard**: Real-time guard events, mode switching (observe/enforce/off)
+- **Agent Panel**: Detect installed agents, one-click proxy takeover with crash recovery
+- **Stats Bar**: Blocked/warning counts, proxy/bridge port display
+
+**Proxy Takeover**: Click "Take Over" to automatically redirect your agent's API endpoint to the Qise proxy. Original config is backed up and auto-restored on exit or crash.
+
+| Agent | Environment Variable | Redirect Target |
+|-------|---------------------|-----------------|
+| Generic OpenAI | `OPENAI_API_BASE` | `http://localhost:8822/v1` |
+| Claude Code | `ANTHROPIC_BASE_URL` | `http://localhost:8822/v1` |
 
 ### Zero-Code: MCP Mode
 
@@ -249,7 +272,7 @@ plugin.register(ctx)
 ### Run Tests
 
 ```bash
-pytest tests/ -v    # 410 tests
+pytest tests/ -v    # 439 tests
 ```
 
 ## 14 Guards at a Glance
@@ -370,11 +393,13 @@ qise/
 │   │   ├── pipeline.py    # Ingress/Egress/Output pipeline with BLOCK short-circuit
 │   │   ├── shield.py      # Main entry point — 14 guards, dependency injection
 │   │   ├── config.py      # ShieldConfig parser for shield.yaml
+│   │   ├── baseline_db.py # SQLite persistence for baseline hash records
 │   │   ├── session_tracker.py  # Cross-turn security state
 │   │   └── event_logger.py     # Structured security event logging
 │   ├── guards/            # 14 Guard implementations
 │   ├── models/            # ModelRouter (httpx-based OpenAI-compatible client)
 │   ├── data/              # ThreatPatternLoader + BaselineManager + PromptExampleLoader
+│   │   ├── baseline_manager.py # SHA-256 hash baselines (YAML + SQLite)
 │   ├── providers/         # SecurityContextProvider (DSL template rendering)
 │   ├── adapters/          # 5 Framework adapters
 │   │   ├── base.py        #   AgentAdapter ABC + IngressCheckMixin + EgressCheckMixin
@@ -390,12 +415,26 @@ qise/
 │   │   ├── interceptor.py #   ProxyInterceptor routing through Guard pipelines
 │   │   ├── context_injector.py # SecurityContext injection into system messages
 │   │   └── config.py      #   ProxyConfig with env overrides
+│   ├── bridge/            # Python Bridge (Rust Proxy ↔ Guard Pipeline)
+│   │   ├── server.py      #   BridgeServer (aiohttp) with 6 endpoints
+│   │   ├── protocol.py    #   GuardCheckRequest/Response Pydantic models
+│   │   └── cli.py         #   `qise bridge start` CLI
 │   └── mcp_server.py      # MCP Server (4 security check tools)
+├── src-tauri/             # Desktop App (Tauri 2 + React)
+│   ├── src/               #   Rust backend
+│   │   ├── proxy.rs       #   Embedded axum proxy with guard pipeline
+│   │   ├── bridge.rs      #   Python Bridge subprocess management
+│   │   ├── takeover.rs    #   Agent config takeover + crash recovery
+│   │   ├── guard_client.rs#   Bridge HTTP client
+│   │   └── commands.rs    #   9 Tauri IPC commands
+│   └── ...
+├── src-ui/                # React frontend (Raycast-style dark UI)
+│   └── src/components/    #   AgentPanel, GuardList, EventLog, ProxyToggle, StatusIndicator
 ├── data/
 │   ├── threat_patterns/   # 6 YAML threat patterns
 │   ├── security_contexts/ # 8 DSL security context templates
 │   └── prompts/           # 6 YAML few-shot example libraries (103 examples)
-├── tests/                 # 410 tests
+├── tests/                 # 439 tests
 ├── eval/                  # Evaluation datasets and results
 └── docs/                  # Architecture, Guards, Threat Model, Integration
 ```
@@ -405,7 +444,8 @@ qise/
 ```bash
 qise check bash '{"command": "rm -rf /"}'  # Single security check
 qise serve                                  # Start MCP Server
-qise proxy start --port 8822                # Start HTTP proxy
+qise proxy start --port 8822                # Start Rust HTTP proxy
+qise bridge start --port 8823               # Start Python Bridge
 qise init                                   # Generate shield.yaml
 qise adapters                               # List framework adapters
 qise adapters nexau                         # Show integration code
@@ -445,13 +485,20 @@ qise version                                # Print version
 | CLI (check / serve / proxy / init / adapters / context / guards / version) | ✅ Complete |
 | MCP Server (4 security check tools) | ✅ Complete |
 | SecurityContextProvider (DSL template rendering) | ✅ Complete |
-| BaselineManager (SHA-256 hash integrity) | ✅ Complete |
+| BaselineManager (SHA-256 hash + SQLite) | ✅ Complete |
 | Soft-Hard Defense Linkage (active_security_rules) | ✅ Complete |
 | Structured SLM Prompts (IS/NOT + few-shot) | ✅ Complete |
 | Dynamic Few-Shot Loading (PromptExampleLoader) | ✅ Complete |
 | Confidence-based SLM Override (<0.65 / ≥0.65) | ✅ Complete |
-| 410 unit + integration + performance tests | ✅ Complete |
-| Desktop App (Tauri 2) | 🔜 Planned |
+| Configurable skip_slm_on_rule_pass + slm_override_rule_warn_threshold | ✅ Complete |
+| Rust Proxy (axum + hyper + rustls, SSE streaming) | ✅ Complete |
+| Python Bridge (aiohttp, 6 endpoints, event buffer) | ✅ Complete |
+| Desktop App (Tauri 2, System Tray, Proxy Toggle) | ✅ Complete |
+| Proxy Takeover (Agent config auto-redirect + crash recovery) | ✅ Complete |
+| Real-time Frontend (AgentPanel, EventLog, GuardList) | ✅ Complete |
+| BaselineDB SQLite Persistence | ✅ Complete |
+| 439 unit + integration + performance tests | ✅ Complete |
+| OpenAI Agents SDK E2E Test (10/10 passed) | ✅ Complete |
 
 ## License
 

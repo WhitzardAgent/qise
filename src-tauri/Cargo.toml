@@ -1,0 +1,30 @@
+[package]
+name = "qise-app"
+version = "0.1.0"
+description = "Qise — AI Agent Security Framework"
+authors = ["Qise Team"]
+edition = "2021"
+
+[lib]
+name = "qise_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hyper = { version = "1", features = ["client", "http1", "http2"] }
+tower-http = { version = "0.6", features = ["cors"] }
+bytes = "1"
+futures = "0.3"
+tokio-stream = "0.1"

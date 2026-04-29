@@ -11,9 +11,12 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from qise.core.baseline_db import BaselineDB
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -58,10 +61,11 @@ class BaselineManager:
         assert result.matches
     """
 
-    def __init__(self, baselines_dir: Path | str | None = None) -> None:
+    def __init__(self, baselines_dir: Path | str | None = None, db: BaselineDB | None = None) -> None:
         self._baselines_dir = Path(baselines_dir) if baselines_dir else None
         if self._baselines_dir:
             self._baselines_dir.mkdir(parents=True, exist_ok=True)
+        self._db = db  # Optional SQLite persistence; None → YAML-only
 
     @staticmethod
     def compute_hash(content: str) -> str:
@@ -76,6 +80,9 @@ class BaselineManager:
         self, tool_name: str, description: str, source: str = "", metadata: dict[str, Any] | None = None
     ) -> BaselineRecord:
         """Record a tool description hash baseline."""
+        meta = metadata or {}
+        if "description_preview" not in meta:
+            meta["description_preview"] = description[:200]
         record = BaselineRecord(
             item_id=tool_name,
             item_type="tool",
@@ -83,7 +90,7 @@ class BaselineManager:
             content_hash=self.compute_hash(description),
             content_length=len(description),
             registered_at=datetime.now(UTC).isoformat(),
-            metadata=metadata or {},
+            metadata=meta,
         )
         self._save(record)
         return record
@@ -100,6 +107,9 @@ class BaselineManager:
         self, doc_id: str, content: str, source: str = "", metadata: dict[str, Any] | None = None
     ) -> BaselineRecord:
         """Record a KB document hash baseline."""
+        meta = metadata or {}
+        if "content_preview" not in meta:
+            meta["content_preview"] = content[:200]
         record = BaselineRecord(
             item_id=doc_id,
             item_type="kb",
@@ -107,7 +117,7 @@ class BaselineManager:
             content_hash=self.compute_hash(content),
             content_length=len(content),
             registered_at=datetime.now(UTC).isoformat(),
-            metadata=metadata or {},
+            metadata=meta,
         )
         self._save(record)
         return record
@@ -124,6 +134,9 @@ class BaselineManager:
         self, entry_id: str, content: str, source: str = "", metadata: dict[str, Any] | None = None
     ) -> BaselineRecord:
         """Record a memory entry hash baseline."""
+        meta = metadata or {}
+        if "content_preview" not in meta:
+            meta["content_preview"] = content[:200]
         record = BaselineRecord(
             item_id=entry_id,
             item_type="memory",
@@ -131,7 +144,7 @@ class BaselineManager:
             content_hash=self.compute_hash(content),
             content_length=len(content),
             registered_at=datetime.now(UTC).isoformat(),
-            metadata=metadata or {},
+            metadata=meta,
         )
         self._save(record)
         return record
@@ -152,7 +165,12 @@ class BaselineManager:
         return self._baselines_dir / f"{item_type}_{safe_id}.yaml"
 
     def _save(self, record: BaselineRecord) -> None:
-        """Persist a baseline record to YAML."""
+        """Persist a baseline record to YAML and optionally to SQLite."""
+        # SQLite first (more durable)
+        if self._db is not None:
+            self._save_to_db(record)
+
+        # Also save to YAML if baselines_dir is set
         filepath = self._filepath(record.item_type, record.item_id)
         if filepath is None:
             return
@@ -160,17 +178,58 @@ class BaselineManager:
         with open(filepath, "w") as f:
             yaml.safe_dump(record.model_dump(), f, default_flow_style=False)
 
+    def _save_to_db(self, record: BaselineRecord) -> None:
+        """Save a baseline record to SQLite."""
+        preview = ""
+        if record.item_type == "tool":
+            preview = record.metadata.get("description_preview", "")
+            self._db.record_tool_baseline(record.item_id, record.content_hash, preview, record.registered_at)
+        elif record.item_type == "kb":
+            preview = record.metadata.get("content_preview", "")
+            self._db.record_kb_baseline(record.item_id, record.content_hash, preview, record.registered_at)
+        elif record.item_type == "memory":
+            preview = record.metadata.get("content_preview", "")
+            self._db.record_memory_baseline(record.item_id, record.content_hash, preview, record.registered_at)
+
     def _load(self, item_type: str, item_id: str) -> BaselineRecord | None:
-        """Load a baseline record from YAML."""
+        """Load a baseline record from YAML, falling back to SQLite."""
+        # Try YAML first
         filepath = self._filepath(item_type, item_id)
-        if filepath is None or not filepath.exists():
+        if filepath is not None and filepath.exists():
+            try:
+                with open(filepath) as f:
+                    raw = yaml.safe_load(f)
+                return BaselineRecord(**raw) if raw else None
+            except Exception:
+                pass
+
+        # Fallback to SQLite
+        if self._db is not None:
+            return self._load_from_db(item_type, item_id)
+
+        return None
+
+    def _load_from_db(self, item_type: str, item_id: str) -> BaselineRecord | None:
+        """Load a baseline record from SQLite."""
+        row = None
+        if item_type == "tool":
+            row = self._db.check_tool_baseline(item_id)
+        elif item_type == "kb":
+            row = self._db.check_kb_baseline(item_id)
+        elif item_type == "memory":
+            row = self._db.check_memory_baseline(item_id)
+
+        if row is None:
             return None
-        try:
-            with open(filepath) as f:
-                raw = yaml.safe_load(f)
-            return BaselineRecord(**raw) if raw else None
-        except Exception:
-            return None
+
+        hash_key = "description_hash" if item_type == "tool" else "content_hash"
+        return BaselineRecord(
+            item_id=item_id,
+            item_type=item_type,
+            content_hash=row.get(hash_key, ""),
+            content_length=0,
+            registered_at=row.get("recorded_at", ""),
+        )
 
     def _check(self, item_type: str, item_id: str, content: str) -> BaselineCheckResult:
         """Compare current content against stored baseline."""
