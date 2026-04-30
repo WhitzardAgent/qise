@@ -16,6 +16,8 @@ pub struct AppStatus {
     bridge_port: u16,
     blocked_count: u64,
     warning_count: u64,
+    slm_status: String,       // "local" / "cloud" / "unavailable"
+    slm_latency_ms: u64,      // most recent SLM call latency
 }
 
 #[derive(Serialize, Clone)]
@@ -75,7 +77,7 @@ pub async fn toggle_protection(
             upstream_url,
             upstream_api_key,
             proxy_port,
-            app,
+            app.clone(),
         ).await?;
 
         let mut s = state.lock().await;
@@ -83,6 +85,9 @@ pub async fn toggle_protection(
         s.proxy_handle = Some(proxy_handle);
         s.bridge_handle = Some(bridge_handle);
         tracing::info!("Protection enabled — proxy on {}, bridge on {}", proxy_port, bridge_port);
+
+        // Update tray menu text
+        crate::tray::update_tray_menu(&app, true);
     } else {
         // --- Disable: stop proxy, then bridge ---
         let mut s = state.lock().await;
@@ -97,6 +102,9 @@ pub async fn toggle_protection(
 
         s.protection_enabled = false;
         tracing::info!("Protection disabled — proxy + bridge stopped");
+
+        // Update tray menu text
+        crate::tray::update_tray_menu(&app, false);
     }
 
     Ok(())
@@ -105,12 +113,39 @@ pub async fn toggle_protection(
 #[tauri::command]
 pub async fn get_status(state: State<'_, SharedState>) -> Result<AppStatus, String> {
     let s = state.lock().await;
+
+    // Try to get SLM status from Bridge health endpoint
+    let (slm_status, slm_latency_ms) = if s.protection_enabled {
+        if let Some(ref _bridge_handle) = s.bridge_handle {
+            let bridge_url = format!("http://127.0.0.1:{}", s.bridge_port);
+            let client = crate::guard_client::GuardClient::new(&bridge_url, 3);
+            if let Ok(data) = client.health_detail().await {
+                let mode = data.get("slm_mode")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unavailable")
+                    .to_string();
+                let lat = data.get("slm_latency_ms")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                (mode, lat)
+            } else {
+                ("unavailable".to_string(), 0)
+            }
+        } else {
+            ("unavailable".to_string(), 0)
+        }
+    } else {
+        ("unavailable".to_string(), 0)
+    };
+
     Ok(AppStatus {
         protection_enabled: s.protection_enabled,
         proxy_port: s.proxy_port,
         bridge_port: s.bridge_port,
         blocked_count: s.blocked_count,
         warning_count: s.warning_count,
+        slm_status,
+        slm_latency_ms,
     })
 }
 
@@ -281,4 +316,134 @@ fn parse_agent_type_str(s: &str) -> Result<crate::takeover::AgentType, String> {
         "ClaudeCode" | "claude_code" => Ok(crate::takeover::AgentType::ClaudeCode),
         _ => Err(format!("Unknown agent type: {}", s)),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Config Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_config(state: State<'_, SharedState>) -> Result<serde_json::Value, String> {
+    let s = state.lock().await;
+    let config_path = if s.config_path.is_empty() {
+        let home = dirs_home()?;
+        format!("{}/.qise/shield.yaml", home)
+    } else {
+        s.config_path.clone()
+    };
+
+    // Try to read shield.yaml
+    match std::fs::read_to_string(&config_path) {
+        Ok(content) => {
+            match serde_yaml::from_str::<serde_json::Value>(&content) {
+                Ok(val) => Ok(val),
+                Err(e) => Err(format!("Failed to parse shield.yaml: {}", e)),
+            }
+        }
+        Err(_) => {
+            // File doesn't exist — return default config
+            Ok(serde_json::json!({
+                "version": "1.0",
+                "integration": {
+                    "mode": "proxy",
+                    "proxy": {
+                        "port": 8822,
+                        "target_agents": ["claude_code"],
+                        "auto_takeover": true,
+                        "crash_recovery": true,
+                    }
+                },
+                "models": {
+                    "slm": {
+                        "base_url": "http://localhost:11434/v1",
+                        "model": "qwen3:4b",
+                        "timeout_ms": 5000,
+                    },
+                    "llm": {
+                        "base_url": "",
+                        "model": "",
+                        "timeout_ms": 5000,
+                    },
+                },
+                "guards": {
+                    "enabled": [
+                        "prompt", "command", "credential", "reasoning",
+                        "filesystem", "network", "exfil", "resource", "audit",
+                        "tool_sanity", "context", "output", "tool_policy", "supply_chain",
+                    ],
+                    "config": {},
+                },
+            }))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn save_config(
+    config: serde_json::Value,
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    let s = state.lock().await;
+    let config_path = if s.config_path.is_empty() {
+        let home = dirs_home()?;
+        let dir = format!("{}/.qise", home);
+        let _ = std::fs::create_dir_all(&dir);
+        format!("{}/shield.yaml", dir)
+    } else {
+        s.config_path.clone()
+    };
+    drop(s);
+
+    // Convert JSON to YAML and write
+    let yaml_str = serde_yaml::to_string(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    // Atomic write: write to temp file then rename
+    let temp_path = format!("{}.tmp", config_path);
+    std::fs::write(&temp_path, &yaml_str)
+        .map_err(|e| format!("Failed to write config: {}", e))?;
+    std::fs::rename(&temp_path, &config_path)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename config file: {}", e)
+        })?;
+
+    tracing::info!("Config saved to {}", config_path);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_default_config() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "version": "1.0",
+        "integration": {
+            "mode": "proxy",
+            "proxy": {
+                "port": 8822,
+                "target_agents": ["claude_code"],
+                "auto_takeover": true,
+                "crash_recovery": true,
+            }
+        },
+        "models": {
+            "slm": {
+                "base_url": "http://localhost:11434/v1",
+                "model": "qwen3:4b",
+                "timeout_ms": 5000,
+            },
+            "llm": {
+                "base_url": "",
+                "model": "",
+                "timeout_ms": 5000,
+            },
+        },
+        "guards": {
+            "enabled": [
+                "prompt", "command", "credential", "reasoning",
+                "filesystem", "network", "exfil", "resource", "audit",
+                "tool_sanity", "context", "output", "tool_policy", "supply_chain",
+            ],
+            "config": {},
+        },
+    }))
 }

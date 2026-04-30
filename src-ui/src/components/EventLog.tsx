@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { SecurityEvent } from "../lib/api";
 
@@ -6,6 +6,8 @@ interface EventLogProps {
   events: SecurityEvent[];
   onEvent: (event: SecurityEvent) => void;
 }
+
+type EventFilter = "all" | "blocked" | "warnings";
 
 function verdictBadgeClass(verdict: string): string {
   switch (verdict.toLowerCase()) {
@@ -21,6 +23,8 @@ function verdictBadgeClass(verdict: string): string {
 }
 
 export default function EventLog({ events, onEvent }: EventLogProps) {
+  const [filter, setFilter] = useState<EventFilter>("all");
+
   // Listen for real-time guard events from Tauri backend
   useEffect(() => {
     const unlisten = listen<Record<string, unknown>>("guard-event", (event) => {
@@ -57,6 +61,12 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
     };
   }, [onEvent]);
 
+  const filteredEvents = events.filter((e) => {
+    if (filter === "blocked") return e.verdict.toLowerCase() === "block";
+    if (filter === "warnings") return e.verdict.toLowerCase() === "warn";
+    return true;
+  });
+
   if (events.length === 0) {
     return (
       <div className="qise-card p-6 shadow-double-ring text-center">
@@ -68,30 +78,58 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
   }
 
   return (
-    <div className="qise-card p-4 shadow-double-ring space-y-2">
-      {events.map((event, i) => (
-        <div
-          key={i}
-          className={`flex items-center gap-3 py-2 px-3 rounded-lg ${
-            event.verdict.toLowerCase() === "block"
-              ? "border-l-2 border-[#FF6363]"
-              : ""
-          }`}
-        >
-          <span className="text-xs font-mono text-[#6a6b6c]">
-            {event.timestamp}
-          </span>
-          <span className="text-xs font-mono text-[#9c9c9d]">
-            {event.guard_name}
-          </span>
-          <span className={verdictBadgeClass(event.verdict)}>
-            {event.verdict}
-          </span>
-          <span className="text-sm text-[#cecece] truncate">
-            {event.message}
-          </span>
-        </div>
-      ))}
+    <div>
+      {/* Filter buttons */}
+      <div className="flex gap-2 mb-3">
+        {(["all", "blocked", "warnings"] as EventFilter[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-1 rounded-[43px] text-xs font-medium transition-all ${
+              filter === f
+                ? "bg-[hsla(0,0%,100%,0.815)] text-[#07080a]"
+                : "bg-[#1b1c1e] text-[#9c9c9d] hover:text-[#cecece]"
+            }`}
+          >
+            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {f === "all" && ` (${events.length})`}
+            {f === "blocked" && ` (${events.filter((e) => e.verdict.toLowerCase() === "block").length})`}
+            {f === "warnings" && ` (${events.filter((e) => e.verdict.toLowerCase() === "warn").length})`}
+          </button>
+        ))}
+      </div>
+
+      <div className="qise-card p-4 shadow-double-ring space-y-2">
+        {filteredEvents.length === 0 ? (
+          <p className="text-sm text-[#6a6b6c] text-center py-4">
+            No {filter} events
+          </p>
+        ) : (
+          filteredEvents.map((event, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-3 py-2 px-3 rounded-lg animate-fade-in ${
+                event.verdict.toLowerCase() === "block"
+                  ? "border-l-2 border-[#FF6363]"
+                  : ""
+              }`}
+            >
+              <span className="text-xs font-mono text-[#6a6b6c]">
+                {event.timestamp}
+              </span>
+              <span className="text-xs font-mono text-[#9c9c9d]">
+                {event.guard_name}
+              </span>
+              <span className={verdictBadgeClass(event.verdict)}>
+                {event.verdict}
+              </span>
+              <span className="text-sm text-[#cecece] truncate">
+                {event.message}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

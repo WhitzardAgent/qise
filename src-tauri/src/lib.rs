@@ -103,6 +103,9 @@ pub fn run() {
             commands::takeover_agent,
             commands::restore_agent,
             commands::get_takeover_status,
+            commands::get_config,
+            commands::save_config,
+            commands::get_default_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

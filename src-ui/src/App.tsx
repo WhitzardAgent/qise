@@ -5,9 +5,13 @@ import ProxyToggle from "./components/ProxyToggle";
 import GuardList from "./components/GuardList";
 import EventLog from "./components/EventLog";
 import AgentPanel from "./components/AgentPanel";
+import ConfigPanel from "./components/ConfigPanel";
 import { AppStatus, GuardInfo, SecurityEvent, AgentInfo } from "./lib/api";
 
+type TabId = "dashboard" | "configuration";
+
 function App() {
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [guards, setGuards] = useState<GuardInfo[]>([]);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
@@ -22,6 +26,17 @@ function App() {
 
     const interval = setInterval(loadStatus, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Listen for tray toggle events
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      listen<boolean>("toggle-protection", (event) => {
+        handleToggle(event.payload);
+      }).then((fn) => { unlisten = fn; });
+    });
+    return () => { unlisten?.(); };
   }, []);
 
   async function loadStatus() {
@@ -96,7 +111,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-qise-deep p-6">
+    <div className="min-h-screen bg-qise-deep p-6 pb-20">
       {/* Header */}
       <header className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
@@ -140,25 +155,64 @@ function App() {
             Bridge: <span className="text-[#f9f9f9] font-mono">{status?.bridge_port ?? 8823}</span>
           </span>
         </div>
+        <div className="qise-card px-4 py-3 flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${
+            status?.slm_status === "local" ? "bg-qise-green" :
+            status?.slm_status === "cloud" ? "bg-qise-yellow" :
+            "bg-[#6a6b6c]"
+          }`} />
+          <span className="text-sm text-[#9c9c9d]">
+            SLM: <span className="text-[#f9f9f9] font-mono">{status?.slm_status ?? "unavailable"}</span>
+            {status?.slm_latency_ms ? (
+              <span className="text-[#6a6b6c] ml-1">{status.slm_latency_ms}ms</span>
+            ) : null}
+          </span>
+        </div>
       </div>
 
-      {/* Agents */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium text-[#f9f9f9] mb-4">Agents</h2>
-        <AgentPanel agents={agents} onRefresh={loadAgents} />
-      </section>
+      {/* Tab content */}
+      {activeTab === "dashboard" ? (
+        <>
+          {/* Agents */}
+          <section className="mb-8">
+            <h2 className="text-lg font-medium text-[#f9f9f9] mb-4">Agents</h2>
+            <AgentPanel agents={agents} onRefresh={loadAgents} />
+          </section>
 
-      {/* Guard List */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium text-[#f9f9f9] mb-4">Guards</h2>
-        <GuardList guards={guards} onSetMode={handleSetGuardMode} />
-      </section>
+          {/* Guard List */}
+          <section className="mb-8">
+            <h2 className="text-lg font-medium text-[#f9f9f9] mb-4">Guards</h2>
+            <GuardList guards={guards} onSetMode={handleSetGuardMode} />
+          </section>
 
-      {/* Event Log */}
-      <section>
-        <h2 className="text-lg font-medium text-[#f9f9f9] mb-4">Recent Events</h2>
-        <EventLog events={events} onEvent={handleEvent} />
-      </section>
+          {/* Event Log */}
+          <section>
+            <h2 className="text-lg font-medium text-[#f9f9f9] mb-4">Recent Events</h2>
+            <EventLog events={events} onEvent={handleEvent} />
+          </section>
+        </>
+      ) : (
+        <ConfigPanel />
+      )}
+
+      {/* Tab bar — fixed bottom */}
+      <div className="fixed bottom-0 left-0 right-0 bg-qise-deep border-t border-[rgba(255,255,255,0.06)]">
+        <div className="flex justify-center gap-2 p-3">
+          {(["dashboard", "configuration"] as TabId[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2 rounded-[43px] text-sm font-medium transition-all ${
+                activeTab === tab
+                  ? "bg-[hsla(0,0%,100%,0.815)] text-[#07080a]"
+                  : "text-[#9c9c9d] hover:text-[#cecece]"
+              }`}
+            >
+              {tab === "dashboard" ? "Dashboard" : "Configuration"}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

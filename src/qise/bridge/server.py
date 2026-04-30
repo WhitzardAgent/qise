@@ -4,12 +4,13 @@ Receives guard check requests from the Rust Proxy, runs the Qise Guard
 Pipeline (ingress/egress/output), and returns structured decisions.
 
 Endpoints:
-  POST /v1/guard/check    — Main guard analysis endpoint
-  GET  /v1/bridge/health  — Health check
-  GET  /v1/bridge/metrics — Metrics snapshot
-  GET  /v1/bridge/guards  — List all guards with real mode + strategy
-  GET  /v1/bridge/events  — Recent security events
-  POST /v1/bridge/guard/mode — Set a guard's mode
+  POST /v1/guard/check           — Main guard analysis endpoint
+  GET  /v1/bridge/health         — Health check
+  GET  /v1/bridge/metrics        — Metrics snapshot
+  GET  /v1/bridge/guards         — List all guards with real mode + strategy
+  GET  /v1/bridge/events         — Recent security events
+  POST /v1/bridge/guard/mode     — Set a guard's mode
+  WS   /v1/bridge/events/stream  — WebSocket real-time event stream
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ import time
 from collections import deque
 from typing import Any
 
-from aiohttp import web
+from aiohttp import web, WSMsgType
 
 from qise.bridge.protocol import (
     GuardCheckRequest,
@@ -41,6 +42,8 @@ class BridgeServer:
         self._app: web.Application | None = None
         self._runner: web.AppRunner | None = None
         self._event_buffer: deque[dict[str, str]] = deque(maxlen=1000)
+        self._last_slm_latency_ms: int = 0
+        self._ws_clients: list[web.WebSocketResponse] = []
 
     async def start(self) -> None:
         """Start the bridge server."""
@@ -51,6 +54,7 @@ class BridgeServer:
         self._app.router.add_get("/v1/bridge/guards", self._handle_guards)
         self._app.router.add_get("/v1/bridge/events", self._handle_events)
         self._app.router.add_post("/v1/bridge/guard/mode", self._handle_set_guard_mode)
+        self._app.router.add_get("/v1/bridge/events/stream", self._handle_events_stream)
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
@@ -86,14 +90,17 @@ class BridgeServer:
         # Run guard analysis in thread pool to avoid blocking event loop
         result = await asyncio.to_thread(self._run_guard_pipeline, req)
 
-        # Record guard events to the buffer
+        # Record guard events to the buffer and push to WebSocket clients
         for gr in result.guard_results:
-            self._event_buffer.append({
+            event_data = {
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "guard_name": gr.guard,
                 "verdict": gr.verdict,
                 "message": gr.message,
-            })
+            }
+            self._event_buffer.append(event_data)
+            # Push to WebSocket clients
+            self._notify_ws_clients(event_data)
 
         return web.json_response(result.model_dump())
 
@@ -108,15 +115,28 @@ class BridgeServer:
             for name in self._shield.config.guards.enabled
         }
 
+        start = time.monotonic()
+
         if req.type == "request":
-            return self._check_request(req, guard_modes)
+            result = self._check_request(req, guard_modes)
         elif req.type == "response":
-            return self._check_response(req, guard_modes)
+            result = self._check_response(req, guard_modes)
         else:
-            return GuardCheckResponse(
+            result = GuardCheckResponse(
                 action="pass",
                 warnings=[f"Unknown check type: {req.type}"],
             )
+
+        # Track SLM latency from guard results
+        for gr in result.guard_results:
+            if gr.latency_ms > 0:
+                self._last_slm_latency_ms = gr.latency_ms
+
+        # If no guard reported latency, estimate from total time
+        if self._last_slm_latency_ms == 0 and result.guard_results:
+            self._last_slm_latency_ms = int((time.monotonic() - start) * 1000)
+
+        return result
 
     def _check_request(
         self, req: GuardCheckRequest, guard_modes: dict[str, str]
@@ -265,9 +285,21 @@ class BridgeServer:
     async def _handle_health(self, request: web.Request) -> web.Response:
         """Handle GET /v1/bridge/health."""
         slm_available = self._shield.model_router.is_available("slm")
+
+        # Determine SLM mode: local (localhost/11434), cloud, or unavailable
+        slm_mode = "unavailable"
+        if slm_available:
+            base_url = self._shield.model_router.slm_config.base_url
+            if "localhost:11434" in base_url or "127.0.0.1:11434" in base_url:
+                slm_mode = "local"
+            else:
+                slm_mode = "cloud"
+
         return web.json_response({
             "status": "ok",
             "slm_available": slm_available,
+            "slm_mode": slm_mode,
+            "slm_latency_ms": self._last_slm_latency_ms,
         })
 
     async def _handle_metrics(self, request: web.Request) -> web.Response:
@@ -342,3 +374,45 @@ class BridgeServer:
         elif guard_name in output:
             return "output"
         return "unknown"
+
+    # ------------------------------------------------------------------
+    # WebSocket: real-time event stream
+    # ------------------------------------------------------------------
+
+    def _notify_ws_clients(self, event_data: dict[str, str]) -> None:
+        """Send event data to all connected WebSocket clients."""
+        # Schedule sends — fire and forget (errors handled on next poll)
+        dead_clients: list[web.WebSocketResponse] = []
+        for ws in self._ws_clients:
+            try:
+                # Use ensure_future to avoid blocking
+                asyncio.ensure_future(ws.send_json(event_data))
+            except Exception:
+                dead_clients.append(ws)
+        for ws in dead_clients:
+            self._ws_clients.remove(ws)
+
+    async def _handle_events_stream(self, request: web.Request) -> web.WebSocketResponse:
+        """Handle WS /v1/bridge/events/stream — real-time event push."""
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+
+        self._ws_clients.append(ws)
+        logger.info("WebSocket client connected (total: %d)", len(self._ws_clients))
+
+        try:
+            async for msg in ws:
+                if msg.type == WSMsgType.TEXT:
+                    # Client can send ping as text
+                    if msg.data == "ping":
+                        await ws.send_str("pong")
+                elif msg.type == WSMsgType.PING:
+                    await ws.pong()
+                elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE):
+                    break
+        finally:
+            if ws in self._ws_clients:
+                self._ws_clients.remove(ws)
+            logger.info("WebSocket client disconnected (total: %d)", len(self._ws_clients))
+
+        return ws

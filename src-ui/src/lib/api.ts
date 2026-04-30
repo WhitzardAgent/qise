@@ -6,6 +6,8 @@ export interface AppStatus {
   bridge_port: number;
   blocked_count: number;
   warning_count: number;
+  slm_status: string;       // "local" | "cloud" | "unavailable"
+  slm_latency_ms: number;   // most recent SLM call latency
 }
 
 export interface GuardInfo {

@@ -33,24 +33,30 @@ impl GuardClient {
         }
     }
 
-    /// Check if the bridge is available via health check.
+    /// Check if the bridge is available via health check (returns bool only).
     pub async fn health_check(&self) -> bool {
+        let result = self.health_detail().await;
+        result.is_ok()
+    }
+
+    /// Check bridge health and return the full JSON response.
+    pub async fn health_detail(&self) -> Result<serde_json::Value, String> {
         let url = format!("{}/v1/bridge/health", self.base_url);
         match self.client.get(&url).timeout(Duration::from_secs(5)).send().await {
             Ok(resp) if resp.status().is_success() => {
                 info!("Bridge health check OK");
                 self.bridge_available.store(true, std::sync::atomic::Ordering::Relaxed);
-                true
+                resp.json::<serde_json::Value>().await.map_err(|e| format!("Parse error: {}", e))
             }
             Ok(resp) => {
                 warn!("Bridge health check returned status {}", resp.status());
                 self.bridge_available.store(false, std::sync::atomic::Ordering::Relaxed);
-                false
+                Err(format!("Bridge returned status {}", resp.status()))
             }
             Err(e) => {
                 warn!("Bridge health check failed: {}", e);
                 self.bridge_available.store(false, std::sync::atomic::Ordering::Relaxed);
-                false
+                Err(format!("Bridge request failed: {}", e))
             }
         }
     }

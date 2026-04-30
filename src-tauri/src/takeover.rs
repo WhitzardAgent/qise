@@ -68,6 +68,9 @@ pub struct TakeoverState {
     pub taken_at: String,
     /// Whether it has been restored.
     pub restored: bool,
+    /// Path to config file backup (if config file was modified).
+    #[serde(default)]
+    pub config_file_backup: Option<String>,
 }
 
 /// Manages proxy takeovers for agents.
@@ -148,12 +151,21 @@ impl TakeoverManager {
             info!("Set {} = {} (was {:?})", var_name, new_value, original_env_vars[var_name]);
         }
 
-        let state = TakeoverState {
+        // Also try config file takeover for supported agents
+        let config_backup = self.takeover_config_file(agent);
+
+        let mut state = TakeoverState {
             agent_name: key.clone(),
             original_env_vars,
             taken_at: chrono_now(),
             restored: false,
+            config_file_backup: None,
         };
+
+        // Store config file backup path if we modified a config file
+        if let Some(backup_path) = config_backup {
+            state.config_file_backup = Some(backup_path);
+        }
 
         self.active_takeovers.insert(key, state.clone());
         self.save_state()?;
@@ -181,6 +193,11 @@ impl TakeoverManager {
                     info!("Removed {} (was not set before)", var_name);
                 }
             }
+        }
+
+        // Restore config file if we backed one up
+        if let Some(ref backup_path) = state.config_file_backup {
+            self.restore_config_file(agent, backup_path);
         }
 
         self.save_state()?;
@@ -234,6 +251,87 @@ impl TakeoverManager {
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
+    }
+
+    /// Try to take over via config file modification.
+    /// Returns the backup file path if a config file was modified.
+    fn takeover_config_file(&self, agent: &AgentType) -> Option<String> {
+        match agent {
+            AgentType::ClaudeCode => self.takeover_claude_code_config(),
+            AgentType::GenericOpenAI => None, // No standard config file for generic OpenAI
+        }
+    }
+
+    /// Try to restore agent's config file from backup.
+    fn restore_config_file(&self, agent: &AgentType, backup_path: &str) {
+        match agent {
+            AgentType::ClaudeCode => self.restore_claude_code_config(backup_path),
+            AgentType::GenericOpenAI => {}
+        }
+    }
+
+    /// Take over Claude Code by modifying its settings.
+    /// Claude Code uses CLAUDE_API_BASE env var or settings files.
+    fn takeover_claude_code_config(&self) -> Option<String> {
+        // Claude Code's primary config is via ANTHROPIC_BASE_URL env var,
+        // which we already handle via takeover_env_vars().
+        // For config file support, we look for common Claude Code config paths:
+        // - ~/.claude/settings.json (if it exists)
+        // - ~/.claude.json (legacy)
+        let home = std::env::var("HOME").unwrap_or_default();
+        let proxy_url = format!("http://localhost:{}/v1", self.proxy_port);
+
+        // Try ~/.claude/settings.json
+        let settings_path = format!("{}/.claude/settings.json", home);
+        if let Ok(content) = std::fs::read_to_string(&settings_path) {
+            if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                // Backup original
+                let backup_path = format!("{}/claude_settings_{}.json", self.backup_dir.display(), timestamp_short());
+                if std::fs::write(&backup_path, &content).is_ok() {
+                    // Try to set apiBaseUrl
+                    if let Some(obj) = settings.as_object_mut() {
+                        obj.insert("apiBaseUrl".to_string(), serde_json::Value::String(proxy_url.clone()));
+                    }
+                    // Atomic write: write to temp file then rename
+                    let temp_path = format!("{}.tmp", settings_path);
+                    if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                        if std::fs::write(&temp_path, &json).is_ok() {
+                            if std::fs::rename(&temp_path, &settings_path).is_ok() {
+                                info!("Claude Code settings.json updated with apiBaseUrl = {}", proxy_url);
+                                return Some(backup_path);
+                            }
+                        }
+                    }
+                    // Cleanup temp file on failure
+                    let _ = std::fs::remove_file(&temp_path);
+                }
+            }
+        }
+
+        // No settings.json found or modification failed — env var is the primary method
+        info!("Claude Code: no settings.json found, using env var only");
+        None
+    }
+
+    /// Restore Claude Code settings from backup.
+    fn restore_claude_code_config(&self, backup_path: &str) {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let settings_path = format!("{}/.claude/settings.json", home);
+
+        if std::path::Path::new(backup_path).exists() {
+            // Atomic restore: copy backup to temp then rename
+            let temp_path = format!("{}.tmp", settings_path);
+            if std::fs::copy(backup_path, &temp_path).is_ok() {
+                if std::fs::rename(&temp_path, &settings_path).is_ok() {
+                    info!("Claude Code settings.json restored from backup");
+                    // Clean up backup file
+                    let _ = std::fs::remove_file(backup_path);
+                    return;
+                }
+            }
+            let _ = std::fs::remove_file(&temp_path);
+            warn!("Failed to restore Claude Code settings.json from backup");
+        }
     }
 
     /// Save takeover state to disk.
@@ -311,4 +409,16 @@ fn chrono_now() -> String {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Short timestamp for file naming.
+fn timestamp_short() -> String {
+    let output = std::process::Command::new("date")
+        .arg("+%Y%m%d%H%M%S")
+        .output()
+        .ok();
+    output
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "0".to_string())
 }
