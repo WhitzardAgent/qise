@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from qise.adapters.base import EgressCheckMixin, IngressCheckMixin
-from qise.adapters.hermes import QiseHermesPlugin
+from qise.adapters.hermes import QiseHermesAdapter
 from qise.adapters.nanobot import QiseNanobotHook
 from qise.core.config import ShieldConfig
 from qise.core.guard_base import AIGuardBase, RuleChecker

@@ -2,14 +2,14 @@
 
 Available adapters:
   - QiseNanobotHook: Nanobot AgentHook integration
-  - QiseHermesPlugin: Hermes Plugin hook integration
-  - QiseNexauMiddleware: NexAU Middleware integration
+  - QiseHermesAdapter: Hermes tool wrapper integration (Proxy mode recommended)
+  - QiseNexauMiddleware: NexAU Middleware integration (not yet verified)
   - QiseLangGraphWrapper: LangGraph tool wrapper integration
   - QiseOpenAIAgentsGuardrails: OpenAI Agents SDK guardrails integration
 """
 
 from qise.adapters.base import AgentAdapter, EgressCheckMixin, IngressCheckMixin
-from qise.adapters.hermes import QiseHermesPlugin
+from qise.adapters.hermes import QiseHermesAdapter
 from qise.adapters.langgraph import QiseLangGraphWrapper
 from qise.adapters.nanobot import QiseNanobotHook
 from qise.adapters.nexau import QiseNexauMiddleware
@@ -20,7 +20,7 @@ __all__ = [
     "IngressCheckMixin",
     "EgressCheckMixin",
     "QiseNanobotHook",
-    "QiseHermesPlugin",
+    "QiseHermesAdapter",
     "QiseNexauMiddleware",
     "QiseLangGraphWrapper",
     "QiseOpenAIAgentsGuardrails",

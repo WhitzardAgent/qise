@@ -1,0 +1,58 @@
+# QiseGuard-SLM LoRA Training Configuration
+# Base: Qwen3-4B (verify first, then compress to 1.7B)
+
+# Model
+base_model: Qwen/Qwen3-4B
+method: lora
+
+# LoRA parameters
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Training data
+train_file: datasets/processed/all_tasks_train.jsonl
+val_split: 0.05
+max_seq_length: 2048
+
+# Training parameters
+learning_rate: 2.0e-4
+num_train_epochs: 3
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4
+warmup_ratio: 0.1
+weight_decay: 0.01
+lr_scheduler_type: cosine
+optim: adamw_torch
+
+# Format enforcement
+system_prompt: "You are a security classifier. Analyze the input and return JSON with: verdict (safe/suspicious/malicious), confidence (0.0-1.0), risk_source (from enum), reasoning (1-2 sentences). Output ONLY valid JSON, no markdown."
+
+# Output
+output_dir: models/qiseguard-4b-v0.1
+logging_dir: models/qiseguard-4b-v0.1/logs
+save_strategy: epoch
+evaluation_strategy: epoch
+save_total_limit: 3
+
+# Evaluation
+eval_datasets:
+  - path: eval/datasets/  # Qise internal eval
+    format: yaml
+  - path: datasets/processed/
+    format: jsonl
+
+# Success criteria
+target_metrics:
+  f1: 0.93      # Phase 1 target (≥0.97 Phase 2)
+  fpr: 0.05     # Phase 1 target (≤0.03 Phase 2)
+  json_compliance: 0.95  # Phase 1 target (≥0.99 Phase 2)
+  latency_gpu_ms: 200    # Phase 1 target (<100 Phase 2)

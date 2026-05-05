@@ -196,7 +196,20 @@ if result.should_block:
     print(f"Blocked: {result.blocked_by}")
 ```
 
+### Adapter E2E Verification Matrix
+
+| Framework | E2E Verified | Proxy Cover | SDK Adapter Status | pip Package | Notes |
+|-----------|-------------|-------------|-------------------|-------------|-------|
+| OpenAI Agents SDK | ✅ R16 10/10 | ✅ | ✅ Real-verified | `openai-agents` | |
+| LangGraph | ✅ R19 8/8 | ✅ | ✅ Fixed & verified | `langgraph` | StructuredTool handling fixed |
+| MCP Server | ✅ R19 8/8 | N/A | ✅ Real-verified | `mcp` | 4 tools all verified |
+| Nanobot | ✅ R19 8/8 | ✅ | ✅ Fixed & verified | `nanobot-ai` | tool_results API fixed |
+| Hermes | ❌ No hooks | ✅ | ✅ Rewritten | `hermes-ai` | No plugin system; use wrap_tool or Proxy |
+| NexAU | ❌ Not installable | ✅ | Unverified | N/A | No public pip package |
+
 ### Nanobot
+
+**E2E Verified**: 8/8 tests pass (`examples/nanobot_live_test.py`)
 
 ```python
 from qise import Shield
@@ -209,32 +222,44 @@ loop = AgentLoop(hooks=[hook])
 
 | Feature | Supported |
 |---------|-----------|
-| Ingress (tool result check) | Yes |
-| Egress (tool call check) | Yes |
-| Output (leak detection) | Yes |
-| Security context injection | Yes |
+| Ingress (tool result check) | Yes (after_iteration) |
+| Egress (tool call check) | Yes (before_execute_tools) |
+| Output (leak detection) | Yes (after_iteration) |
+| Security context injection | Yes (before_execute_tools) |
 | Reasoning access | Yes (via agent_reasoning) |
+
+**R19 Fix**: `after_iteration` now correctly uses `zip(context.tool_calls, context.tool_results)` to match tool names by index. Nanobot's `tool_results` are raw return values (strings/lists), not objects with `.tool_name`/`.content` attributes.
 
 ### Hermes
 
+**E2E Verified**: Adapter tested with `hermes-ai` 0.3.20. No plugin/hook system found — adapter rewritten.
+
 ```python
 from qise import Shield
-from qise.adapters.hermes import QiseHermesPlugin
+from qise.adapters.hermes import QiseHermesAdapter
 
 shield = Shield.from_config()
-plugin = QiseHermesPlugin(shield)
-plugin.register(ctx)
+adapter = QiseHermesAdapter(shield)
+
+# Wrap tools with security checks
+safe_bash = adapter.wrap_tool(bash)
+
+# Or check output manually
+result = adapter.check_agent_output("Agent response text")
 ```
 
 | Feature | Supported |
 |---------|-----------|
-| Ingress (tool result check) | Yes (transform_tool_result) |
-| Egress (tool call check) | Yes (pre_tool_call → {"action": "skip"}) |
-| Output (leak detection) | Yes (post_llm_call) |
+| Egress (tool call check) | Yes (wrap_tool — raises RuntimeError on block) |
+| Output (leak detection) | Yes (check_agent_output) |
 | Security context injection | — |
 | Reasoning access | — |
 
+**R19 Discovery**: Hermes-ai 0.3.20 does NOT have a plugin/hook system. The original `QiseHermesPlugin` with `register()`, `pre_tool_call`, `post_tool_call`, `transform_tool_result`, and `post_llm_call` hooks was based on incorrect API assumptions. The adapter was rewritten as `QiseHermesAdapter` with `wrap_tool()` and `check_agent_output()` methods. **Proxy mode recommended** for full protection.
+
 ### NexAU
+
+**Not Installable**: No public pip package (`nexau`, `nexau-agent`, `NexAU` all return 404).
 
 ```python
 from qise import Shield
@@ -247,15 +272,17 @@ agent = NexAUAgent(middlewares=[middleware])
 
 | Feature | Supported |
 |---------|-----------|
-| Ingress (tool result check) | Yes (after_tool) |
-| Egress (tool call check) | Yes (after_model, before_tool) |
-| Output (leak detection) | Yes (after_agent) |
-| Security context injection | Yes (before_model) |
-| Reasoning access | Yes (after_model) |
+| Ingress (tool result check) | Yes (after_tool) — unverified |
+| Egress (tool call check) | Yes (after_model, before_tool) — unverified |
+| Output (leak detection) | Yes (after_agent) — unverified |
+| Security context injection | Yes (before_model) — unverified |
+| Reasoning access | Yes (after_model) — unverified |
 
-6 middleware hooks: before/after_agent, before/after_model, before/after_tool.
+**Status**: Adapter code exists but has NOT been verified against a real NexAU installation. Proxy mode provides full protection for any OpenAI-compatible NexAU deployment.
 
 ### LangGraph
+
+**E2E Verified**: 8/8 tests pass (`examples/langgraph_live_test.py`)
 
 ```python
 from qise import Shield
@@ -284,7 +311,14 @@ graph.add_node("pre_model", wrapper.qise_pre_model_hook)
 
 BLOCK strategy: raises `ToolException` (if langgraph installed) or `RuntimeError`.
 
+**R19 Fixes**:
+- `ToolException` import corrected: `from langchain_core.tools import ToolException` (not `from langgraph.tools`)
+- `wrap_tool_call` now detects `StructuredTool` (BaseTool subclass) and creates `StructuredTool.from_function()` with guarded func, preserving name/description/args_schema
+- `qise_pre_model_hook` uses `llm_input_messages` for ephemeral injection when available
+
 ### OpenAI Agents SDK
+
+**E2E Verified**: R16 10/10 tests pass (`examples/openai_agents_live_test.py`)
 
 ```python
 from qise import Shield

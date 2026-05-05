@@ -13,7 +13,15 @@ Usage:
 
     shield = Shield.from_config()
     hook = QiseNanobotHook(shield)
+
+    # Option 1: Pass to AgentLoop
+    from nanobot.agent.loop import AgentLoop
     loop = AgentLoop(hooks=[hook])
+
+    # Option 2: Pass to Nanobot.run
+    from nanobot import Nanobot
+    bot = Nanobot()
+    await bot.run("Hello", hooks=[hook])
 """
 
 from __future__ import annotations
@@ -26,8 +34,15 @@ from qise.core.shield import Shield
 
 logger = logging.getLogger("qise.adapters.nanobot")
 
+# Try to import Nanobot's AgentHook base class for forward compatibility
+_AgentHook: type | None = None
+try:
+    from nanobot.agent.hook import AgentHook as _AgentHook
+except ImportError:
+    pass
 
-class QiseNanobotHook(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
+
+class QiseNanobotHook(AgentAdapter, EgressCheckMixin, IngressCheckMixin):
     """Nanobot AgentHook that routes all tool calls through Qise Shield.
 
     Integration points:
@@ -36,6 +51,10 @@ class QiseNanobotHook(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
 
     BLOCK strategy: Remove dangerous tool calls from context.tool_calls
     (mutable list) rather than raising exceptions.
+
+    Note: context.tool_results contains raw return values from tool.execute(),
+    NOT objects with .content/.tool_name attributes. Tool names must be obtained
+    from context.tool_calls by matching index.
     """
 
     def __init__(self, shield: Shield, session_id: str | None = None) -> None:
@@ -59,7 +78,7 @@ class QiseNanobotHook(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
         Args:
             context: Nanobot AgentHookContext with:
                 - tool_calls: list[ToolCallRequest] (mutable — can remove items)
-                - messages: list of conversation messages
+                - messages: list[dict] of conversation messages
         """
         if not self._installed:
             return
@@ -104,22 +123,34 @@ class QiseNanobotHook(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
     async def after_iteration(self, context: Any) -> None:
         """Check tool results and output text after iteration.
 
+        Tool names are obtained from context.tool_calls (matched by index),
+        since context.tool_results contains raw return values (strings, lists)
+        without .name or .content attributes.
+
         Args:
             context: Nanobot AgentHookContext with:
-                - tool_results: list of tool execution results
-                - final_content: str (agent's output text)
+                - tool_calls: list[ToolCallRequest]
+                - tool_results: list[Any] (raw return values, matched by index)
+                - final_content: str | None (agent's output text)
         """
         if not self._installed:
             return
 
         # Check tool results for injection
+        # tool_results are raw values — get tool names from tool_calls by index
+        tool_calls = getattr(context, "tool_calls", [])
         tool_results = getattr(context, "tool_results", [])
-        for tr in tool_results:
-            content = getattr(tr, "content", "") or getattr(tr, "result", "")
-            tool_name = getattr(tr, "tool_name", "") or getattr(tr, "name", "")
+
+        for i, tr in enumerate(tool_results):
+            # Get tool name from tool_calls by matching index
+            tool_name = ""
+            if i < len(tool_calls):
+                tool_name = getattr(tool_calls[i], "name", "")
+
+            content = str(tr) if tr else ""
             if content:
                 result = self.check_tool_result(
-                    content=str(content),
+                    content=content,
                     tool_name=tool_name,
                     session_id=self.session_id,
                 )

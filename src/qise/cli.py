@@ -625,18 +625,19 @@ def _hermes_snippet() -> str:
 #    plugins/qise/__init__.py:
 
 from qise import Shield
-from qise.adapters.hermes import QiseHermesPlugin
+from qise.adapters.hermes import QiseHermesAdapter
 
 def register(ctx):
     shield = Shield.from_config()
-    plugin = QiseHermesPlugin(shield)
-    plugin.register(ctx)
+    adapter = QiseHermesAdapter(shield)
+    # Wrap tools with security checks before passing to Agent
+    # Note: Hermes-ai does not have a plugin/hook system,
+    # so use adapter.wrap_tool() on each tool function.
 
-# The plugin will:
-#   - pre_tool_call: block dangerous tool calls (returns {"action": "skip"})
-#   - transform_tool_result: sanitize tool results with injection content
-#   - post_tool_call: log results to session tracker
-#   - post_llm_call: check LLM output for credential/PII leaks
+# The adapter will:
+#   - wrap_tool: block dangerous tool calls (raises RuntimeError)
+#   - check_agent_output: check LLM output for credential/PII leaks
+# For full protection, use Proxy mode instead.
 #
 # 3. Configuration (optional):
 #    Create shield.yaml to customize guard modes:

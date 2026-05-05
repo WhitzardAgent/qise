@@ -1,12 +1,15 @@
 """LangGraph adapter — routes tool calls through Qise Shield via wrapper functions.
 
-Uses LangGraph's ToolNode and model hooks for non-invasive integration:
-- wrap_tool_call / awrap_tool_call: Intercept and check tool calls before execution
+Uses LangGraph's create_react_agent for non-invasive integration:
+- wrap_tool_call: Wrap a @tool-decorated function with Qise security checks
+- awrap_tool_call: Async version of wrap_tool_call
 - qise_pre_model_hook: Inject SecurityContext into messages before model call
+  (uses llm_input_messages for ephemeral injection — LLM sees it but it
+  doesn't pollute the persistent message history)
 
 BLOCK strategy:
-- wrap_tool_call: Raise ToolException with block reason
-- awrap_tool_call: Raise ToolException with block reason
+- wrap_tool_call / awrap_tool_call: Raise ToolException with block reason
+  (ToolException is from langchain_core.tools, not langgraph.tools)
 
 Usage:
     from qise import Shield
@@ -15,19 +18,19 @@ Usage:
     shield = Shield.from_config()
     wrapper = QiseLangGraphWrapper(shield)
 
-    # Wrap tools for LangGraph ToolNode
+    # Wrap tools — preserves StructuredTool type and schema
     safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
 
-    # Or use async version
-    safe_tools = [wrapper.awrap_tool_call(tool) for tool in my_tools]
-
-    # Add pre-model hook for SecurityContext injection
-    graph.add_node("pre_model", wrapper.qise_pre_model_hook)
+    # Create agent with pre_model_hook for security context injection
+    agent = create_react_agent(
+        model=llm,
+        tools=safe_tools,
+        pre_model_hook=wrapper.qise_pre_model_hook,
+    )
 """
 
 from __future__ import annotations
 
-import functools
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -37,14 +40,29 @@ from qise.core.shield import Shield
 
 logger = logging.getLogger("qise.adapters.langgraph")
 
+# Try to import ToolException from the correct location
+_ToolException: type | None = None
+try:
+    from langchain_core.tools import ToolException as _ToolException
+except ImportError:
+    pass
+
+
+def _raise_blocked(reason: str) -> None:
+    """Raise ToolException if available, otherwise RuntimeError."""
+    if _ToolException is not None:
+        raise _ToolException(reason)
+    raise RuntimeError(reason)
+
 
 class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
     """LangGraph tool wrapper that routes tool calls through Qise Shield.
 
     Integration points:
-      - wrap_tool_call: Synchronous wrapper — raises ToolException on block
-      - awrap_tool_call: Async wrapper — raises ToolException on block
+      - wrap_tool_call: Wraps a StructuredTool or callable with security checks
+      - awrap_tool_call: Async version of wrap_tool_call
       - qise_pre_model_hook: Injects SecurityContext into state messages
+        (passes as llm_input_messages for ephemeral injection)
     """
 
     def __init__(self, shield: Shield, session_id: str | None = None) -> None:
@@ -66,22 +84,82 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
     # Tool call wrappers
     # ------------------------------------------------------------------
 
-    def wrap_tool_call(self, tool: Callable) -> Callable:
-        """Wrap a synchronous tool function with Qise security checks.
+    def wrap_tool_call(self, tool: Any) -> Any:
+        """Wrap a @tool-decorated function or StructuredTool with Qise checks.
 
-        Before executing the tool, runs egress checks. If blocked,
-        raises ToolException instead of executing.
+        For StructuredTool (produced by @tool decorator), creates a new
+        StructuredTool with the same schema but a guarded .func.
+
+        For plain callables, wraps with functools.wraps.
 
         Args:
-            tool: The original tool function to wrap.
+            tool: The original tool (@tool-decorated, StructuredTool, or callable).
 
         Returns:
-            Wrapped function that checks security before execution.
+            Wrapped tool with security checks before execution.
         """
+        is_base_tool = hasattr(tool, "invoke") and hasattr(tool, "name")
+
+        if is_base_tool:
+            return self._wrap_base_tool(tool)
+        else:
+            return self._wrap_callable(tool)
+
+    def _wrap_base_tool(self, tool: Any) -> Any:
+        """Wrap a StructuredTool/BaseTool instance by creating a new StructuredTool."""
+        import functools
+
+        original_func = getattr(tool, "func", None) or tool
+        tool_name = getattr(tool, "name", "unknown")
+        tool_description = getattr(tool, "description", "")
+        args_schema = getattr(tool, "args_schema", None)
+
+        shield = self.shield
+        session_id = self.session_id
+
+        # Create guarded function
+        @functools.wraps(original_func)
+        def guarded_func(*args: Any, **kwargs: Any) -> Any:
+            tool_args = kwargs if kwargs else {"args": str(args)}
+            result = shield.pipeline.run_egress(
+                __import__("qise.core.models", fromlist=["GuardContext"]).GuardContext(
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    session_id=session_id,
+                ),
+            )
+            if result.should_block:
+                reason = f"Qise blocked: {result.blocked_by}"
+                logger.warning("LangGraph: blocked %s — %s", tool_name, reason)
+                _raise_blocked(reason)
+
+            return original_func(*args, **kwargs)
+
+        # Try to create a new StructuredTool with the guarded func
+        try:
+            from langchain_core.tools import StructuredTool
+
+            return StructuredTool.from_function(
+                func=guarded_func,
+                name=tool_name,
+                description=tool_description,
+                args_schema=args_schema,
+            )
+        except (ImportError, Exception) as e:
+            logger.debug("Could not create StructuredTool, using plain wrapper: %s", e)
+            # Fallback: set attributes on the guarded func
+            guarded_func.name = tool_name  # type: ignore[attr-defined]
+            guarded_func.description = tool_description  # type: ignore[attr-defined]
+            return guarded_func
+
+    def _wrap_callable(self, tool: Callable) -> Callable:
+        """Wrap a plain callable with Qise security checks."""
+        import functools
+
+        tool_name = getattr(tool, "name", None) or getattr(tool, "__name__", "unknown")
 
         @functools.wraps(tool)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
-            tool_name = getattr(tool, "name", None) or tool.__name__
             tool_args = kwargs if kwargs else {"args": str(args)}
 
             result = self.check_tool_call(
@@ -93,36 +171,86 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
             if result.should_block:
                 reason = f"Qise blocked: {result.blocked_by}"
                 logger.warning("LangGraph: blocked %s — %s", tool_name, reason)
-                # Try to import ToolException from langgraph, fall back to RuntimeError
-                try:
-                    from langgraph.tools import ToolException
-                    raise ToolException(reason)
-                except ImportError:
-                    raise RuntimeError(reason)
+                _raise_blocked(reason)
 
-            # Handle langchain BaseTool objects (use .invoke()) vs plain functions
-            if hasattr(tool, "invoke") and callable(tool.invoke):
-                return tool.invoke(tool_args)
             return tool(*args, **kwargs)
 
+        wrapped.name = tool_name  # type: ignore[attr-defined]
         return wrapped
 
-    def awrap_tool_call(self, tool: Callable) -> Callable:
-        """Wrap an async tool function with Qise security checks.
+    def awrap_tool_call(self, tool: Any) -> Any:
+        """Wrap an async tool with Qise security checks.
 
-        Before executing the tool, runs egress checks. If blocked,
-        raises ToolException instead of executing.
-
-        Args:
-            tool: The original async tool function to wrap.
-
-        Returns:
-            Wrapped async function that checks security before execution.
+        For StructuredTool, creates a new StructuredTool with guarded coroutine.
+        For plain async callables, wraps directly.
         """
+        is_base_tool = hasattr(tool, "ainvoke") and hasattr(tool, "name")
+
+        if is_base_tool:
+            return self._awrap_base_tool(tool)
+        else:
+            return self._awrap_callable(tool)
+
+    def _awrap_base_tool(self, tool: Any) -> Any:
+        """Wrap a StructuredTool/BaseTool with async guarded function."""
+        import functools
+
+        original_func = getattr(tool, "func", None)
+        original_coroutine = getattr(tool, "coroutine", None)
+        tool_name = getattr(tool, "name", "unknown")
+        tool_description = getattr(tool, "description", "")
+        args_schema = getattr(tool, "args_schema", None)
+
+        shield = self.shield
+        session_id = self.session_id
+
+        @functools.wraps(original_func or tool)
+        async def guarded_coroutine(*args: Any, **kwargs: Any) -> Any:
+            tool_args = kwargs if kwargs else {"args": str(args)}
+            result = shield.pipeline.run_egress(
+                __import__("qise.core.models", fromlist=["GuardContext"]).GuardContext(
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    session_id=session_id,
+                ),
+            )
+            if result.should_block:
+                reason = f"Qise blocked: {result.blocked_by}"
+                logger.warning("LangGraph: blocked %s — %s", tool_name, reason)
+                _raise_blocked(reason)
+
+            if original_coroutine:
+                return await original_coroutine(*args, **kwargs)
+            # Sync func called from async context
+            if original_func:
+                return original_func(*args, **kwargs)
+            return await tool.ainvoke(tool_args)
+
+        # Try to create StructuredTool
+        try:
+            from langchain_core.tools import StructuredTool
+
+            return StructuredTool.from_function(
+                func=original_func,
+                coroutine=guarded_coroutine,
+                name=tool_name,
+                description=tool_description,
+                args_schema=args_schema,
+            )
+        except (ImportError, Exception) as e:
+            logger.debug("Could not create StructuredTool, using plain wrapper: %s", e)
+            guarded_coroutine.name = tool_name  # type: ignore[attr-defined]
+            guarded_coroutine.description = tool_description  # type: ignore[attr-defined]
+            return guarded_coroutine
+
+    def _awrap_callable(self, tool: Callable) -> Callable:
+        """Wrap a plain async callable with Qise security checks."""
+        import functools
+
+        tool_name = getattr(tool, "name", None) or getattr(tool, "__name__", "unknown")
 
         @functools.wraps(tool)
         async def wrapped(*args: Any, **kwargs: Any) -> Any:
-            tool_name = getattr(tool, "name", None) or tool.__name__
             tool_args = kwargs if kwargs else {"args": str(args)}
 
             result = self.check_tool_call(
@@ -134,17 +262,11 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
             if result.should_block:
                 reason = f"Qise blocked: {result.blocked_by}"
                 logger.warning("LangGraph: blocked %s — %s", tool_name, reason)
-                try:
-                    from langgraph.tools import ToolException
-                    raise ToolException(reason)
-                except ImportError:
-                    raise RuntimeError(reason)
+                _raise_blocked(reason)
 
-            # Handle langchain BaseTool objects (use .ainvoke()) vs plain functions
-            if hasattr(tool, "ainvoke") and callable(tool.ainvoke):
-                return await tool.ainvoke(tool_args)
             return await tool(*args, **kwargs)
 
+        wrapped.name = tool_name  # type: ignore[attr-defined]
         return wrapped
 
     # ------------------------------------------------------------------
@@ -152,46 +274,41 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
     # ------------------------------------------------------------------
 
     def qise_pre_model_hook(self, state: dict[str, Any]) -> dict[str, Any]:
-        """LangGraph pre-model hook: inject SecurityContext into messages.
+        """LangGraph pre_model_hook: inject SecurityContext into messages.
 
-        Scans messages for tool names and injects relevant security rules
-        into the system message.
+        Uses llm_input_messages for ephemeral injection — the LLM sees the
+        security context but it doesn't persist in the conversation history.
 
         Args:
             state: LangGraph state dict with "messages" key.
 
         Returns:
-            Updated state dict with security context injected.
+            State update dict with security context injected.
         """
         messages = state.get("messages", [])
         if not messages:
-            return state
+            return {}
 
-        # Collect tool names from messages
+        # Collect tool names from AIMessage.tool_calls (native LangChain attr)
         tool_names = set()
         for msg in messages:
-            if isinstance(msg, dict):
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "tool_use":
-                            tool_names.add(block.get("name", ""))
+            # LangChain AIMessage has native .tool_calls attribute
+            msg_tool_calls = getattr(msg, "tool_calls", None)
+            if msg_tool_calls:
+                for tc in msg_tool_calls:
+                    name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                    if name:
+                        tool_names.add(name)
+            # Fallback: dict format messages
+            elif isinstance(msg, dict):
                 for tc in msg.get("tool_calls", []):
-                    if isinstance(tc, dict):
-                        name = tc.get("function", {}).get("name", "")
-                        if name:
-                            tool_names.add(name)
-            else:
-                # LangChain message objects
-                additional_kwargs = getattr(msg, "additional_kwargs", {})
-                for tc in additional_kwargs.get("tool_calls", []):
                     if isinstance(tc, dict):
                         name = tc.get("function", {}).get("name", "")
                         if name:
                             tool_names.add(name)
 
         if not tool_names:
-            return state
+            return {}
 
         # Build security context text
         context_parts: list[str] = []
@@ -201,31 +318,37 @@ class QiseLangGraphWrapper(AgentAdapter, IngressCheckMixin, EgressCheckMixin):
                 context_parts.append(ctx_text)
 
         if not context_parts:
-            return state
+            return {}
 
         security_text = "\n".join(context_parts)
 
-        # Inject into system message or prepend as new system message
-        new_messages = list(messages)
-        injected = False
+        # Inject as llm_input_messages (ephemeral — LLM sees but doesn't persist)
+        try:
+            from langchain_core.messages import SystemMessage
 
-        for i, msg in enumerate(new_messages):
-            role = msg.get("role", "") if isinstance(msg, dict) else getattr(msg, "type", "")
-            if role == "system":
-                if isinstance(msg, dict):
-                    msg["content"] = msg.get("content", "") + "\n\n" + security_text
-                else:
-                    existing = getattr(msg, "content", "")
-                    msg.content = existing + "\n\n" + security_text
-                injected = True
-                break
+            security_msg = SystemMessage(content=security_text)
 
-        if not injected:
-            # Prepend a new system message
-            try:
-                from langchain_core.messages import SystemMessage
-                new_messages.insert(0, SystemMessage(content=security_text))
-            except ImportError:
-                new_messages.insert(0, {"role": "system", "content": security_text})
+            # If llm_input_messages exists in state, use it for ephemeral injection
+            if "llm_input_messages" in state:
+                llm_messages = state.get("llm_input_messages") or list(messages)
+                return {
+                    "llm_input_messages": [security_msg] + list(llm_messages),
+                }
 
-        return {**state, "messages": new_messages}
+            # Fallback: inject into messages (persistent)
+            all_messages = list(messages)
+            new_messages = [security_msg] + all_messages
+            return {"messages": new_messages}
+
+        except ImportError:
+            # No langchain_core — use dict format
+            security_msg = {"role": "system", "content": security_text}
+
+            if "llm_input_messages" in state:
+                llm_messages = state.get("llm_input_messages") or list(messages)
+                return {
+                    "llm_input_messages": [security_msg] + list(llm_messages),
+                }
+
+            new_messages = [security_msg] + list(messages)
+            return {"messages": new_messages}

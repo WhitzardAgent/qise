@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from qise.adapters.base import AgentAdapter, EgressCheckMixin, IngressCheckMixin
-from qise.adapters.hermes import QiseHermesPlugin
+from qise.adapters.hermes import QiseHermesAdapter
 from qise.adapters.nanobot import QiseNanobotHook
 from qise.core.shield import Shield
 
@@ -206,65 +206,43 @@ class TestNanobotAdapter:
 
 class TestHermesAdapter:
 
-    def test_plugin_creation(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
-        assert plugin.shield is shield
+    def test_adapter_creation(self, shield: Shield) -> None:
+        adapter = QiseHermesAdapter(shield)
+        assert adapter.shield is shield
 
-    def test_pre_tool_call_blocks_dangerous(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
-        result = plugin._on_pre_tool_call("bash", {"command": "rm -rf /"})
-        # In observe mode, BLOCK → WARN, so no skip returned
-        # In enforce mode, would return {"action": "skip"}
-        # Either way, the method should work
-        if result is not None:
-            assert "action" in result
-            assert result["action"] == "skip"
+    def test_wrap_tool_blocks_dangerous(self, shield: Shield) -> None:
+        adapter = QiseHermesAdapter(shield)
 
-    def test_pre_tool_call_allows_safe(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
-        result = plugin._on_pre_tool_call("bash", {"command": "ls -la"})
-        # Safe call should not be skipped
-        assert result is None
+        def bash(command: str) -> str:
+            return f"ran {command}"
 
-    def test_transform_tool_result_returns_safe(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
-        result = plugin._on_transform_tool_result("read_file", "Normal file contents")
-        assert result == "Normal file contents"
+        wrapped = adapter.wrap_tool(bash)
+        with pytest.raises(RuntimeError, match="Qise blocked"):
+            wrapped(command="rm -rf /")
 
-    def test_post_tool_call_records(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield, session_id="test-session")
-        plugin._on_post_tool_call("bash", {"command": "ls"}, "file1.txt\nfile2.txt")
-        # Should record without crashing
-        history = shield.session_tracker.get_tool_call_history("test-session")
-        assert len(history) >= 1
+    def test_wrap_tool_allows_safe(self, shield: Shield) -> None:
+        adapter = QiseHermesAdapter(shield)
 
-    def test_post_llm_call_checks_output(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
-        # Test with dict response format
-        response = {
-            "choices": [
-                {"message": {"content": "The answer is 42"}}
-            ]
-        }
-        plugin._on_post_llm_call(response)
-        # Should not crash
+        def bash(command: str) -> str:
+            return f"ran {command}"
 
-    def test_register_hooks(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
+        wrapped = adapter.wrap_tool(bash)
+        result = wrapped(command="ls -la")
+        assert result == "ran ls -la"
 
-        registered = []
-        class MockContext:
-            def register_hook(self, event: str, handler: Any) -> None:
-                registered.append(event)
+    def test_wrap_tool_preserves_name(self, shield: Shield) -> None:
+        adapter = QiseHermesAdapter(shield)
 
-        ctx = MockContext()
-        plugin.register(ctx)
-        assert "pre_tool_call" in registered
-        assert "post_tool_call" in registered
-        assert "transform_tool_result" in registered
-        assert "post_llm_call" in registered
+        def my_tool(x: int) -> int:
+            return x * 2
 
-    def test_register_with_no_register_hook(self, shield: Shield) -> None:
-        plugin = QiseHermesPlugin(shield)
-        # Should not crash when context has no register_hook
-        plugin.register(object())
+        wrapped = adapter.wrap_tool(my_tool)
+        assert wrapped.name == "my_tool"
+
+    def test_install_uninstall(self, shield: Shield) -> None:
+        adapter = QiseHermesAdapter(shield)
+        assert not adapter._installed
+        adapter.install()
+        assert adapter._installed
+        adapter.uninstall()
+        assert not adapter._installed

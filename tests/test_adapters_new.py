@@ -191,19 +191,30 @@ class TestLangGraphWrapper:
             await wrapped(command="rm -rf /")
 
     def test_pre_model_hook_injects_context(self, shield: Shield) -> None:
-        """qise_pre_model_hook should inject security context into messages."""
+        """qise_pre_model_hook should inject security context when tool_calls present."""
         wrapper = QiseLangGraphWrapper(shield)
 
-        state = {
+        # State without tool_calls → should return empty dict
+        state_no_tools = {
             "messages": [
                 {"role": "user", "content": "List files"},
             ],
         }
+        result = wrapper.qise_pre_model_hook(state_no_tools)
+        assert result == {}  # No tool calls → nothing to inject
 
-        result = wrapper.qise_pre_model_hook(state)
-        # Should return a dict with messages
-        assert "messages" in result
-        assert isinstance(result["messages"], list)
+        # State with tool_calls → should inject context
+        state_with_tools = {
+            "messages": [
+                {"role": "user", "content": "List files"},
+                {"role": "assistant", "content": "", "tool_calls": [
+                    {"function": {"name": "bash"}, "id": "tc1"},
+                ]},
+            ],
+        }
+        result = wrapper.qise_pre_model_hook(state_with_tools)
+        # Should return a dict with messages or llm_input_messages
+        assert "messages" in result or "llm_input_messages" in result
 
 
 # ---------------------------------------------------------------------------
