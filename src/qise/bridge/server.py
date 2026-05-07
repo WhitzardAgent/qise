@@ -18,9 +18,10 @@ import asyncio
 import logging
 import time
 from collections import deque
+from contextlib import suppress
 from typing import Any
 
-from aiohttp import web, WSMsgType
+from aiohttp import WSMsgType, web
 
 from qise.bridge.protocol import (
     GuardCheckRequest,
@@ -90,6 +91,8 @@ class BridgeServer:
         # Run guard analysis in thread pool to avoid blocking event loop
         result = await asyncio.to_thread(self._run_guard_pipeline, req)
 
+        self._record_product_event(req, result)
+
         # Record guard events to the buffer and push to WebSocket clients
         for gr in result.guard_results:
             event_data = {
@@ -103,6 +106,48 @@ class BridgeServer:
             self._notify_ws_clients(event_data)
 
         return web.json_response(result.model_dump())
+
+
+    def _record_product_event(self, req: GuardCheckRequest, result: GuardCheckResponse) -> None:
+        if result.action not in {"warn", "block"}:
+            return
+
+        if req.type == "request":
+            stage = "ingress"
+            action_type = "request"
+            if req.tools:
+                action_name = req.tools[0].name
+                resource: Any = req.tools[0].description
+            elif req.messages:
+                action_name = "content_check"
+                resource = req.messages[0].content
+            else:
+                action_name = "content_check"
+                resource = {"model": req.model}
+        else:
+            stage = "egress" if req.tool_calls else "output"
+            action_type = "tool_call" if req.tool_calls else "output"
+            action_name = req.tool_calls[0].tool_name if req.tool_calls else "output"
+            resource = req.tool_calls[0].tool_args if req.tool_calls else req.content
+
+        blocked_by = None
+        if result.block_reason:
+            blocked_by = result.block_reason.rsplit(":", 1)[-1].strip()
+
+        with suppress(Exception):
+            from qise.product.events import record_guard_event
+
+            record_guard_event(
+                stage=stage,
+                source="bridge",
+                verdict=result.action,
+                action_type=action_type,
+                action_name=action_name,
+                resource=resource,
+                blocked_by=blocked_by,
+                warnings=result.warnings,
+                guard_results=[gr.model_dump() for gr in result.guard_results],
+            )
 
     def _run_guard_pipeline(self, req: GuardCheckRequest) -> GuardCheckResponse:
         """Run the appropriate guard pipeline based on request type.
@@ -290,10 +335,7 @@ class BridgeServer:
         slm_mode = "unavailable"
         if slm_available:
             base_url = self._shield.model_router.slm_config.base_url
-            if "localhost:11434" in base_url or "127.0.0.1:11434" in base_url:
-                slm_mode = "local"
-            else:
-                slm_mode = "cloud"
+            slm_mode = "local" if "localhost:11434" in base_url or "127.0.0.1:11434" in base_url else "cloud"
 
         return web.json_response({
             "status": "ok",
@@ -314,7 +356,7 @@ class BridgeServer:
         """Handle GET /v1/bridge/guards — return all guards with real mode + strategy."""
         guards = []
         try:
-            for g in self._shield.pipeline.all_guards():
+            for g in self._shield.pipeline.all_guards:
                 pipeline = self._get_pipeline_for_guard(g.name)
                 guards.append({
                     "name": g.name,
@@ -352,7 +394,7 @@ class BridgeServer:
             )
 
         try:
-            for g in self._shield.pipeline.all_guards():
+            for g in self._shield.pipeline.all_guards:
                 if g.name == guard_name:
                     g.mode = mode
                     logger.info("Set guard '%s' mode to '%s'", guard_name, mode)

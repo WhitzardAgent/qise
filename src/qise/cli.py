@@ -16,6 +16,8 @@ import argparse
 import asyncio
 import json
 import sys
+from contextlib import suppress
+from typing import Any
 
 from qise.core.models import GuardContext
 
@@ -79,6 +81,46 @@ def _build_parser() -> argparse.ArgumentParser:
     init_parser = subparsers.add_parser("init", help="Generate shield.yaml configuration file")
     init_parser.add_argument("--force", action="store_true", help="Overwrite existing shield.yaml")
 
+    # qise doctor
+    doctor_parser = subparsers.add_parser("doctor", help="Diagnose local Qise readiness")
+    doctor_parser.add_argument("--json", action="store_true", help="Output JSON")
+
+    # qise status
+    status_parser = subparsers.add_parser("status", help="Show Qise protection status")
+    status_parser.add_argument("--json", action="store_true", help="Output JSON")
+
+    # qise events
+    events_parser = subparsers.add_parser("events", help="Show Qise security events")
+    events_parser.add_argument("--limit", type=int, default=50, help="Maximum events to show")
+    events_parser.add_argument("--since", default=None, help="Filter by duration like 1h/30m/2d or ISO timestamp")
+    events_parser.add_argument("--json", action="store_true", help="Output JSON")
+
+    # qise protect
+    protect_parser = subparsers.add_parser("protect", help="Protect an installed Agent")
+    protect_parser.add_argument("agent", help="Agent name: codex, openclaw, claude-code, or custom")
+    protect_parser.add_argument("--base-url", default="", help="Upstream/manual base URL for custom Agents")
+    protect_parser.add_argument("--experimental", action="store_true", help="Allow experimental integrations")
+
+    # qise restore
+    restore_parser = subparsers.add_parser("restore", help="Restore Agent config modified by Qise")
+    restore_parser.add_argument("agent", help="Agent name or 'all'")
+
+    # qise stop
+    subparsers.add_parser("stop", help="Stop Qise managed services")
+
+    # qise scan
+    scan_parser = subparsers.add_parser("scan", help="Preflight scan Agent assets")
+    scan_subparsers = scan_parser.add_subparsers(dest="scan_command")
+    scan_mcp = scan_subparsers.add_parser("mcp", help="Scan an MCP config file")
+    scan_mcp.add_argument("path", help="Path to MCP JSON/YAML config")
+    scan_mcp.add_argument("--json", action="store_true", help="Output JSON")
+    scan_skill = scan_subparsers.add_parser("skill", help="Scan a Skill directory or file")
+    scan_skill.add_argument("path", help="Path to Skill directory or file")
+    scan_skill.add_argument("--json", action="store_true", help="Output JSON")
+    scan_agent_config = scan_subparsers.add_parser("agent-config", help="Scan an installed Agent config")
+    scan_agent_config.add_argument("agent", help="Agent name: codex, openclaw, claude-code")
+    scan_agent_config.add_argument("--json", action="store_true", help="Output JSON")
+
     # qise adapters
     adapters_parser = subparsers.add_parser("adapters", help="Framework adapter integration")
     adapters_subparsers = adapters_parser.add_subparsers(dest="adapter_name")
@@ -103,6 +145,43 @@ def _build_parser() -> argparse.ArgumentParser:
     add_bridge_parser(subparsers)
 
     return parser
+
+
+def _summarize_guard_results_for_event(result: Any) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for gr in result.results:
+        summary: dict[str, Any] = {
+            "guard": gr.guard_name,
+            "verdict": gr.verdict,
+            "confidence": gr.confidence,
+            "message": gr.message,
+        }
+        if gr.risk_attribution:
+            summary["risk_source"] = gr.risk_attribution.risk_source
+        summaries.append(summary)
+    return summaries
+
+
+def _record_cli_check_event(args: argparse.Namespace, result: Any, tool_args: dict[str, Any]) -> None:
+    if not result.should_block and not result.warnings:
+        return
+    try:
+        from qise.product.events import record_guard_event
+
+        record_guard_event(
+            stage=args.pipeline,
+            source="cli-check",
+            verdict="block" if result.should_block else "warn",
+            action_type="tool_call",
+            action_name=args.tool_name,
+            resource=tool_args,
+            blocked_by=result.blocked_by,
+            warnings=result.warnings,
+            guard_results=_summarize_guard_results_for_event(result),
+        )
+    except Exception:
+        # Product event logging must never change the guard decision.
+        pass
 
 
 def _get_shield(config_path: str | None = None):
@@ -147,6 +226,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
             response["risk_attribution"] = gr.risk_attribution.model_dump()
             break
 
+    _record_cli_check_event(args, result, tool_args)
     print(json.dumps(response, indent=2))
     return 1 if result.should_block else 0
 
@@ -218,7 +298,7 @@ def _cmd_version(args: argparse.Namespace) -> int:
     try:
         v = pkg_version("qise")
     except Exception:
-        v = "0.1.0"
+        from qise import __version__ as v
     print(f"qise {v}")
     return 0
 
@@ -252,6 +332,14 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
         proxy_config.inject_security_context = False
     if args.observe:
         proxy_config.block_on_guard_block = False
+
+    if not proxy_config.upstream_base_url:
+        print(
+            "Error: proxy upstream is not configured. Use --upstream, "
+            "integration.proxy.upstream_url, QISE_PROXY_UPSTREAM_URL, or OPENAI_API_BASE.",
+            file=sys.stderr,
+        )
+        return 2
 
     server = ProxyServer(shield, proxy_config)
 
@@ -295,10 +383,8 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
             if watcher:
                 watcher.stop()
 
-    try:
+    with suppress(KeyboardInterrupt):
         asyncio.run(_run())
-    except KeyboardInterrupt:
-        pass
     return 0
 
 
@@ -316,6 +402,101 @@ def _cmd_init(args: argparse.Namespace) -> int:
     print(f"Created {config_path}")
     print("Edit this file to customize guard modes, model endpoints, and data paths.")
     return 0
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from qise.product.doctor import render_doctor, run_doctor
+
+    report = run_doctor(args.config)
+    print(render_doctor(report, json_output=args.json))
+    return 1 if report.get("errors") else 0
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    from qise.product.status import get_status, render_status
+
+    status = get_status(args.config)
+    print(render_status(status, json_output=args.json))
+    return 0
+
+
+def _cmd_events(args: argparse.Namespace) -> int:
+    from qise.product.events import format_events, load_events
+
+    events = load_events(limit=args.limit, since=args.since)
+    if args.json:
+        print(json.dumps(events, indent=2, sort_keys=True))
+    else:
+        print(format_events(events))
+    return 0
+
+
+def _cmd_protect(args: argparse.Namespace) -> int:
+    from qise.product.agents import protect_agent
+
+    code, message = protect_agent(
+        args.agent,
+        base_url=args.base_url,
+        experimental=args.experimental,
+        config_path=args.config,
+    )
+    print(message)
+    return code
+
+
+def _cmd_restore(args: argparse.Namespace) -> int:
+    from qise.product.agents import restore_agent
+
+    code, message = restore_agent(args.agent)
+    print(message)
+    return code
+
+
+def _cmd_stop(args: argparse.Namespace) -> int:
+    from qise.product.service import stop_managed_services
+
+    stopped, notes = stop_managed_services()
+    if not stopped and not notes:
+        print(
+            "No Qise managed background services are recorded. "
+            "If proxy/bridge is running in the foreground, stop it with Ctrl+C in that terminal."
+        )
+        return 0
+    for line in stopped:
+        print(line)
+    for line in notes:
+        print(line)
+    return 1 if notes else 0
+
+
+def _cmd_scan(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from qise.product.scan import record_scan_event, render_report, scan_agent_config, scan_mcp, scan_skill
+
+    if not args.scan_command:
+        print("Error: specify scan target: qise scan mcp <path> or qise scan skill <path>", file=sys.stderr)
+        return 1
+
+    try:
+        if args.scan_command == "mcp":
+            report = scan_mcp(Path(args.path))
+        elif args.scan_command == "skill":
+            report = scan_skill(Path(args.path))
+        elif args.scan_command == "agent-config":
+            report = scan_agent_config(args.agent)
+        else:
+            print(f"Error: unknown scan target '{args.scan_command}'", file=sys.stderr)
+            return 1
+        record_scan_event(report)
+        print(render_report(report, json_output=args.json))
+        return 1 if report.verdict == "block" else 0
+    except FileNotFoundError:
+        print(f"Error: path not found: {args.path}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"Error: scan failed: {exc}", file=sys.stderr)
+        return 1
 
 
 def _cmd_bridge(args: argparse.Namespace) -> int:
@@ -672,6 +853,13 @@ def main() -> None:
         "adapters": _cmd_adapters,
         "context": _cmd_context,
         "guards": _cmd_guards,
+        "doctor": _cmd_doctor,
+        "status": _cmd_status,
+        "events": _cmd_events,
+        "protect": _cmd_protect,
+        "restore": _cmd_restore,
+        "stop": _cmd_stop,
+        "scan": _cmd_scan,
         "version": _cmd_version,
     }
 

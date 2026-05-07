@@ -13,6 +13,8 @@ from qise.core.models import (
 )
 from qise.core.shield import Shield
 
+__version__ = "0.2.0"
+
 __all__ = [
     "Shield",
     "ShieldConfig",
@@ -22,4 +24,5 @@ __all__ = [
     "PipelineResult",
     "RiskAttribution",
     "TrustBoundary",
+    "__version__",
 ]

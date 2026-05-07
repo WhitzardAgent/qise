@@ -210,6 +210,14 @@ class ProxyServer:
             resp_headers["X-Qise-Metrics"] = self._shield.metrics.brief()
         return web.json_response(response_body, headers=resp_headers)
 
+    def _upstream_url(self, path: str) -> str:
+        base = self._config.upstream_base_url.rstrip("/")
+        if not path.startswith("/"):
+            path = "/" + path
+        if base.endswith("/v1") and path.startswith("/v1/"):
+            return base[:-3] + path
+        return base + path
+
     async def _handle_streaming(
         self,
         request: web.Request,
@@ -220,7 +228,7 @@ class ProxyServer:
         Uses SSEStreamHandler to process chunks with guard interception.
         """
         path = "/" + request.match_info.get("path", "")
-        upstream_url = self._config.upstream_base_url.rstrip("/") + path
+        upstream_url = self._upstream_url(path)
 
         # Build headers
         headers = {}
@@ -286,7 +294,7 @@ class ProxyServer:
         upstream's base URL and API key.
         """
         path = "/" + request.match_info.get("path", "")
-        upstream_url = self._config.upstream_base_url.rstrip("/") + path
+        upstream_url = self._upstream_url(path)
 
         # Build headers — forward most, but replace auth
         headers = {}

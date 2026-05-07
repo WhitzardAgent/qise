@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 
+from qise import __version__
+
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -19,7 +21,7 @@ class TestCLIVersion:
     def test_version_output(self) -> None:
         result = _run(["version"])
         assert result.returncode == 0
-        assert "0.1.0" in result.stdout
+        assert __version__ in result.stdout
 
 
 class TestCLICheck:

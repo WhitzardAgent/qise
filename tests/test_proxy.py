@@ -6,17 +6,14 @@ LLM API. Server tests use aiohttp test utilities.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from qise.core.shield import Shield
 from qise.proxy.config import ProxyConfig
 from qise.proxy.context_injector import ContextInjector
 from qise.proxy.interceptor import ProxyInterceptor
-from qise.proxy.parser import ParsedMessage, RequestParser, ResponseParser
+from qise.proxy.parser import RequestParser, ResponseParser
 from qise.proxy.server import ProxyServer
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -476,6 +473,15 @@ class TestProxyServer:
         assert server.config.listen_port == 0
         assert server.config.upstream_base_url == "http://127.0.0.1:19999"
 
+    def test_upstream_url_accepts_v1_base(self, shield: Shield) -> None:
+        config = ProxyConfig(upstream_base_url="https://api.openai.com/v1")
+        server = ProxyServer(shield, config)
+        assert server._upstream_url("/v1/chat/completions") == "https://api.openai.com/v1/chat/completions"
+
+        config = ProxyConfig(upstream_base_url="https://api.openai.com")
+        server = ProxyServer(shield, config)
+        assert server._upstream_url("/v1/chat/completions") == "https://api.openai.com/v1/chat/completions"
+
     @pytest.mark.asyncio
     async def test_server_start_stop(self, shield: Shield) -> None:
         config = ProxyConfig(
@@ -498,7 +504,6 @@ class TestProxyServer:
             listen_port=0,
             upstream_base_url="http://127.0.0.1:19999",
         )
-        server = ProxyServer(shield, config)
         # Verify the config has /v1/models as passthrough
         assert "/v1/models" in config.passthrough_paths
 

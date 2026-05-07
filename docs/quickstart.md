@@ -1,129 +1,57 @@
-# Quick Start
+# Quickstart
 
-Get Qise running in 5 minutes — from install to first security check.
+This quickstart gives you a local Qise MVP loop: diagnose, scan, block a dangerous tool call, view events, and optionally protect Codex.
 
-## 1. Install
-
-```bash
-pip install qise
-```
-
-## 2. Your First Security Check
-
-```python
-from qise import Shield
-
-shield = Shield.from_config()
-
-# Check a dangerous command — BLOCKED
-result = shield.pipeline.run_egress({
-    "tool_name": "bash",
-    "tool_args": {"command": "rm -rf /"},
-})
-print(result.verdict)      # "block"
-print(result.blocked_by)   # "command"
-
-# Check a safe command — PASSED
-result = shield.pipeline.run_egress({
-    "tool_name": "bash",
-    "tool_args": {"command": "ls -la"},
-})
-print(result.verdict)      # "pass"
-```
-
-Or use the CLI:
+## Install
 
 ```bash
-qise check bash '{"command": "rm -rf /"}'
-# {"verdict": "block", "blocked_by": "command", ...}
-
-qise check bash '{"command": "ls"}'
-# {"verdict": "pass", ...}
+git clone https://github.com/opq-qise/qise.git
+cd qise
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[proxy]"
 ```
 
-## 3. Configure (Optional)
-
-Generate a config file:
+## Run the Safe Demo
 
 ```bash
-qise init
+./scripts/demo_mvp.sh
 ```
 
-Edit `shield.yaml` to customize guard modes:
+The script uses temporary `QISE_HOME` and `QISE_AGENT_HOME` directories, so it does not touch your real `~/.codex` config.
 
-```yaml
-guards:
-  config:
-    command:
-      mode: enforce    # Block dangerous commands
-    prompt:
-      mode: enforce    # Block injection attempts (needs SLM)
-    credential:
-      mode: enforce    # Block credential leaks
-```
-
-## 4. Integrate with Your Agent
-
-### Generic SDK
-
-```python
-from qise import Shield
-from qise.core.models import GuardContext
-
-shield = Shield.from_config()
-result = shield.pipeline.run_egress(GuardContext(
-    tool_name="bash",
-    tool_args={"command": "rm -rf /tmp/*"},
-))
-if result.should_block:
-    raise RuntimeError(f"Blocked: {result.blocked_by}")
-```
-
-### LangGraph
-
-```python
-from qise import Shield
-from qise.adapters.langgraph import QiseLangGraphWrapper
-
-shield = Shield.from_config()
-wrapper = QiseLangGraphWrapper(shield)
-safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
-```
-
-### OpenAI Agents SDK
-
-```python
-from qise import Shield
-from qise.adapters.openai_agents import QiseOpenAIAgentsGuardrails
-
-shield = Shield.from_config()
-guardrails = QiseOpenAIAgentsGuardrails(shield)
-agent = Agent(guardrails=[guardrails.input_guardrail, guardrails.output_guardrail])
-```
-
-### NexAU
-
-```python
-from qise import Shield
-from qise.adapters.nexau import QiseNexauMiddleware
-
-shield = Shield.from_config()
-middleware = QiseNexauMiddleware(shield)
-agent = NexAUAgent(middlewares=[middleware])
-```
-
-## 5. Proxy Mode (Zero-Code)
+## Manual MVP Loop
 
 ```bash
-qise proxy start --port 8822 --upstream https://api.openai.com
+qise doctor
+qise status
+qise scan skill examples/skills/safe
+qise scan skill examples/skills/dangerous || true
+qise scan mcp examples/mcp-dangerous.json || true
+qise check bash '{"command":"rm -rf /"}' || true
+qise events --limit 10
+qise events --limit 10 --json
 ```
 
-Then point your agent's API endpoint to `http://localhost:8822/v1`.
+## Protect Codex
 
-## What's Next?
+If Codex is installed and has a config, run:
 
-- [Architecture](architecture.md) — System design and pipeline details
-- [Guard Specifications](guards.md) — All 14 guards explained
-- [Integration Guide](integration.md) — Proxy, MCP, and SDK modes
-- [Performance](performance.md) — Latency benchmarks
-- [Threat Model](threat-model.md) — Threats Qise addresses
+```bash
+qise protect codex
+qise status
+qise restore codex
+qise stop
+```
+
+`qise protect codex` backs up your config under `~/.qise/backups/codex/...` before patching it.
+
+## When `protect` Needs `--base-url`
+
+Qise first tries to infer the upstream model API from the Agent config. If inference fails, pass the model API your Agent normally uses:
+
+```bash
+qise protect codex --base-url https://api.openai.com/v1
+```
+
+For non-OpenAI providers, use that provider's OpenAI-compatible base URL.

@@ -20,9 +20,18 @@ _DEFAULT_WHITELIST = frozenset({"system", "official", "verified"})
 _MCP_DANGEROUS_COMMAND_PATTERNS: list[tuple[str, str]] = [
     (r"curl\s+.*\|\s*(ba)?sh", "curl pipe to shell in MCP command"),
     (r"wget\s+.*\|\s*(ba)?sh", "wget pipe to shell in MCP command"),
+    (r"rm\s+-rf\s+/", "recursive delete from root in MCP command"),
+    (r"(?:bash|sh)\s+-c\s+.*(?:curl|wget)", "shell command executes remote downloader"),
+]
+
+_MCP_INJECTION_PATTERNS: list[tuple[str, str]] = [
+    (r"ignore (all )?(previous|prior) instructions", "instruction override in tool content"),
+    (r"you are now (developer|system|admin) mode", "role hijack instruction in tool content"),
+    (r"send .* to https?://", "possible exfiltration instruction in tool content"),
 ]
 
 _MCP_SENSITIVE_ENV = frozenset({"API_KEY", "SECRET", "TOKEN", "PASSWORD", "PRIVATE_KEY"})
+_MCP_SENSITIVE_PATHS = ("/etc/passwd", "/etc/shadow", ".ssh/id_rsa", ".ssh/id_ed25519", ".env")
 
 
 # ---------------------------------------------------------------------------
@@ -108,23 +117,50 @@ class SupplyChainGuardRuleChecker(RuleChecker):
 
     def _check_mcp_config(self, context: GuardContext) -> GuardResult | None:
         """Check MCP configuration for suspicious patterns."""
-        # Check command field
+        # Check command and argument fields
+        strings_to_scan: list[tuple[str, str]] = []
         command = context.tool_args.get("command")
         if isinstance(command, str):
+            strings_to_scan.append(("command", command))
+        args = context.tool_args.get("args")
+        if isinstance(args, list):
+            strings_to_scan.extend((f"args[{idx}]", str(value)) for idx, value in enumerate(args))
+        for key in ("description", "content", "manifest", "readme"):
+            value = context.tool_args.get(key)
+            if isinstance(value, str):
+                strings_to_scan.append((key, value))
+
+        for field, value in strings_to_scan:
             for pattern, desc in _MCP_DANGEROUS_COMMAND_PATTERNS:
-                if re.search(pattern, command, re.IGNORECASE):
+                if re.search(pattern, value, re.IGNORECASE):
                     return GuardResult(
                         guard_name="supply_chain",
                         verdict=GuardVerdict.BLOCK,
                         confidence=0.9,
-                        message=f"Dangerous command in MCP config: {desc}",
+                        message=f"Dangerous command in MCP/Skill {field}: {desc}",
                         risk_attribution=RiskAttribution(
                             risk_source="supply_chain",
                             failure_mode="remote_code_execution",
                             real_world_harm="system_compromise",
                             confidence=0.9,
-                            reasoning=f"MCP command matches dangerous pattern: {desc}",
+                            reasoning=f"MCP/Skill {field} matches dangerous pattern: {desc}",
                         ),
+                    )
+            for pattern, desc in _MCP_INJECTION_PATTERNS:
+                if re.search(pattern, value, re.IGNORECASE):
+                    return GuardResult(
+                        guard_name="supply_chain",
+                        verdict=GuardVerdict.WARN,
+                        confidence=0.75,
+                        message=f"Suspicious supply-chain instruction in {field}: {desc}",
+                    )
+            for sensitive_path in _MCP_SENSITIVE_PATHS:
+                if sensitive_path in value:
+                    return GuardResult(
+                        guard_name="supply_chain",
+                        verdict=GuardVerdict.WARN,
+                        confidence=0.7,
+                        message=f"Sensitive path referenced in {field}: {sensitive_path}",
                     )
 
         # Check env field
@@ -169,7 +205,12 @@ Source: {tool_source}
 Configuration: {tool_args}
 
 Return JSON:
-{{"verdict": "safe" | "suspicious" | "malicious", "confidence": 0.0-1.0, "risk_source": "supply_chain" | "none", "reasoning": "..."}}"""
+{{
+  "verdict": "safe" | "suspicious" | "malicious",
+  "confidence": 0.0-1.0,
+  "risk_source": "supply_chain" | "none",
+  "reasoning": "..."
+}}"""
 
     llm_prompt_template = None
 

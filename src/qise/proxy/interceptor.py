@@ -8,11 +8,13 @@ Coordinates request and response interception:
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from qise.core.models import GuardContext, PipelineResult
+from qise.product.events import record_guard_event
 from qise.proxy.parser import ParsedRequest, ParsedResponse
 
 
@@ -125,13 +127,21 @@ class ProxyInterceptor:
         else:
             action = "pass"
 
-        return ProxyDecision(
+        decision = ProxyDecision(
             action=action,
             modified_body=raw_body,
             warnings=all_warnings,
             block_reason=block_reason,
             guard_results=all_results,
         )
+        self._record_decision_event(
+            stage="ingress",
+            decision=decision,
+            action_type="request",
+            action_name=self._request_action_name(parsed),
+            resource=self._request_resource(parsed),
+        )
+        return decision
 
     def intercept_response(
         self,
@@ -198,13 +208,66 @@ class ProxyInterceptor:
         else:
             action = "pass"
 
-        return ProxyDecision(
+        decision = ProxyDecision(
             action=action,
             modified_body=raw_body,
             warnings=all_warnings,
             block_reason=block_reason,
             guard_results=all_results,
         )
+        self._record_decision_event(
+            stage="egress" if parsed.tool_calls else "output",
+            decision=decision,
+            action_type="tool_call" if parsed.tool_calls else "output",
+            action_name=parsed.tool_calls[0].tool_name if parsed.tool_calls else "output",
+            resource=parsed.tool_calls[0].tool_args if parsed.tool_calls else parsed.content,
+        )
+        return decision
+
+    def _record_decision_event(
+        self,
+        *,
+        stage: str,
+        decision: ProxyDecision,
+        action_type: str,
+        action_name: str = "",
+        resource: Any = "",
+    ) -> None:
+        if decision.action not in {"warn", "block"}:
+            return
+        # Event storage must never change the guard decision.
+        with suppress(Exception):
+            record_guard_event(
+                stage=stage,
+                source="proxy",
+                verdict=decision.action,
+                action_type=action_type,
+                action_name=action_name,
+                resource=resource,
+                blocked_by=self._blocked_by(decision),
+                warnings=decision.warnings,
+                guard_results=decision.guard_results,
+            )
+
+    def _blocked_by(self, decision: ProxyDecision) -> str | None:
+        if not decision.block_reason:
+            return None
+        if ":" in decision.block_reason:
+            return decision.block_reason.rsplit(":", 1)[-1].strip() or None
+        return decision.block_reason
+
+    def _request_action_name(self, parsed: ParsedRequest) -> str:
+        if parsed.tools:
+            return parsed.tools[0].name
+        return "content_check"
+
+    def _request_resource(self, parsed: ParsedRequest) -> Any:
+        if parsed.tools:
+            return {"tool": parsed.tools[0].name, "description": parsed.tools[0].description}
+        for msg in parsed.messages:
+            if msg.role == "user" and msg.content:
+                return msg.content
+        return {"model": parsed.model}
 
     def _summarize_results(self, result: PipelineResult) -> list[dict[str, Any]]:
         """Summarize pipeline results for the ProxyDecision."""
@@ -213,6 +276,7 @@ class ProxyInterceptor:
             summary: dict[str, Any] = {
                 "guard": gr.guard_name,
                 "verdict": gr.verdict,
+                "confidence": gr.confidence,
                 "message": gr.message,
             }
             if gr.risk_attribution:
