@@ -1,0 +1,9 @@
+content_hash: 445f35c46ecd9014d3c51754672c795cb339d27776c85d88230a2e7b9ec5119e
+content_length: 84
+item_id: sessions_send
+item_type: tool
+metadata:
+  description_preview: Send a message into another session. Use sessionKey or label
+    to identify the target.
+registered_at: '2026-05-08T12:59:05.695031+00:00'
+source: ''

@@ -1,0 +1,10 @@
+content_hash: dc05539ef1ab7d7a4b6a85aa9b7abf992f2a8d2d19c211c9c61f7457d437b77d
+content_length: 334
+item_id: memory_search
+item_type: tool
+metadata:
+  description_preview: 'Mandatory recall step: semantically search MEMORY.md + memory/*.md
+    (and optional session transcripts) before answering questions about prior work,
+    decisions, dates, people, preferences, or todos; retu'
+registered_at: '2026-05-08T12:59:05.699438+00:00'
+source: ''

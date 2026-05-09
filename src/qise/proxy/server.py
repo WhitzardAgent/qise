@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
@@ -29,6 +31,13 @@ from qise.proxy.parser import RequestParser, ResponseParser
 from qise.proxy.streaming import SSEStreamHandler
 
 logger = logging.getLogger("qise.proxy")
+
+
+@dataclass(frozen=True)
+class ResolvedProxyRoute:
+    agent_name: str = ""
+    upstream_base_url: str = ""
+    upstream_api_key: str = ""
 
 
 class ProxyServer:
@@ -105,14 +114,98 @@ class ProxyServer:
             self._runner = None
         logger.info("Qise proxy stopped")
 
+    def _canonical_path_and_agent(self, path: str) -> tuple[str, str]:
+        """Return (agent_name, OpenAI-compatible path) for agent-prefixed routes."""
+        path_without_query = path.split("?")[0]
+        parts = path_without_query.split("/")
+        if len(parts) >= 5 and parts[1] in {"agent", "agents"} and parts[3] == "v1":
+            try:
+                from qise.product.agents import normalize_agent_key
+
+                agent_name = normalize_agent_key(parts[2])
+            except Exception:
+                agent_name = parts[2].strip().lower()
+            suffix = "/".join(parts[4:])
+            canonical = "/v1" + (f"/{suffix}" if suffix else "")
+            return agent_name, canonical
+        return "", path_without_query
+
+    def _protected_agent_records(self) -> dict[str, dict[str, Any]]:
+        try:
+            from qise.product.service import load_state
+
+            protected = load_state().get("protected_agents", {})
+        except Exception:
+            return {}
+        if not isinstance(protected, dict):
+            return {}
+        return {k: v for k, v in protected.items() if isinstance(v, dict)}
+
+    def _route_from_record(self, agent_name: str, record: dict[str, Any]) -> ResolvedProxyRoute:
+        upstream = str(record.get("upstream_url") or "").rstrip("/")
+        env_key = str(record.get("proxy_env_key") or record.get("upstream_api_key_env") or "")
+        return ResolvedProxyRoute(
+            agent_name=agent_name,
+            upstream_base_url=upstream,
+            upstream_api_key=os.environ.get(env_key, "") if env_key else "",
+        )
+
+    def _route_from_auth(self, request: web.Request) -> ResolvedProxyRoute | None:
+        auth = request.headers.get("Authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        if not token:
+            return None
+
+        matches: list[ResolvedProxyRoute] = []
+        for agent_name, record in self._protected_agent_records().items():
+            env_key = str(record.get("proxy_env_key") or record.get("upstream_api_key_env") or "")
+            if env_key and os.environ.get(env_key) == token:
+                route = self._route_from_record(agent_name, record)
+                if route.upstream_base_url:
+                    matches.append(route)
+        return matches[0] if len(matches) == 1 else None
+
+    def _resolve_route(
+        self,
+        request: web.Request,
+        body: dict[str, Any] | None = None,
+        agent_hint: str = "",
+    ) -> ResolvedProxyRoute:
+        records = self._protected_agent_records()
+
+        if agent_hint and agent_hint in records:
+            route = self._route_from_record(agent_hint, records[agent_hint])
+            if route.upstream_base_url:
+                return route
+
+        auth_route = self._route_from_auth(request)
+        if auth_route is not None:
+            return auth_route
+
+        records_with_upstream = {
+            name: record for name, record in records.items()
+            if str(record.get("upstream_url") or "").strip()
+        }
+        if not agent_hint and len(records_with_upstream) == 1:
+            name, record = next(iter(records_with_upstream.items()))
+            route = self._route_from_record(name, record)
+            if route.upstream_base_url:
+                return route
+
+        return ResolvedProxyRoute(
+            agent_name=agent_hint,
+            upstream_base_url=self._config.upstream_base_url.rstrip("/"),
+            upstream_api_key=self._config.upstream_api_key,
+        )
+
     async def _handle_request(self, request: web.Request) -> web.Response:
         """Main request handler — all paths pass through here.
 
         For intercept_paths (e.g., /v1/chat/completions), run guard checks.
         For all other paths, forward transparently.
         """
-        path = "/" + request.match_info.get("path", "")
-        path_without_query = path.split("?")[0]
+        raw_path = "/" + request.match_info.get("path", "")
+        agent_name, path_without_query = self._canonical_path_and_agent(raw_path)
 
         # Check if this path should be intercepted
         should_intercept = any(
@@ -127,16 +220,28 @@ class ProxyServer:
         )
 
         if is_passthrough or not should_intercept:
-            return await self._forward_request(request)
+            return await self._forward_request(
+                request, path_override=path_without_query, agent_name=agent_name
+            )
 
         # Intercept chat completion requests
         if path_without_query == "/v1/chat/completions" and request.method == "POST":
-            return await self._handle_chat_completions(request)
+            return await self._handle_chat_completions(
+                request, path_override=path_without_query, agent_name=agent_name
+            )
 
         # Other paths on intercepted routes: just forward
-        return await self._forward_request(request)
+        return await self._forward_request(
+            request, path_override=path_without_query, agent_name=agent_name
+        )
 
-    async def _handle_chat_completions(self, request: web.Request) -> web.Response:
+    async def _handle_chat_completions(
+        self,
+        request: web.Request,
+        *,
+        path_override: str | None = None,
+        agent_name: str = "",
+    ) -> web.Response:
         """Handle /v1/chat/completions with full interception pipeline.
 
         Supports both streaming and non-streaming requests.
@@ -149,13 +254,16 @@ class ProxyServer:
                 status=400,
             )
 
+        route = self._resolve_route(request, body, agent_name)
+        agent_name = route.agent_name or agent_name
+
         # Step 1: Parse request
         parsed_request = self._request_parser.parse(body)
 
         # Step 2: Request interception (run in thread to avoid blocking event loop)
         import asyncio
         request_decision = await asyncio.to_thread(
-            self._interceptor.intercept_request, parsed_request, body
+            self._interceptor.intercept_request, parsed_request, body, agent_name
         )
 
         if request_decision.action == "block" and self._config.block_on_guard_block:
@@ -172,10 +280,14 @@ class ProxyServer:
 
         # Step 5: Forward to upstream
         if is_stream:
-            return await self._handle_streaming(request, forward_body)
+            return await self._handle_streaming(
+                request, forward_body, path_override=path_override, route=route, agent_name=agent_name
+            )
 
         # Non-streaming path
-        upstream_response = await self._forward_to_upstream(request, forward_body)
+        upstream_response = await self._forward_to_upstream(
+            request, forward_body, path_override=path_override, route=route
+        )
         if upstream_response.status != 200:
             return upstream_response
 
@@ -189,7 +301,7 @@ class ProxyServer:
         import asyncio
         parsed_response = self._response_parser.parse(response_body)
         response_decision = await asyncio.to_thread(
-            self._interceptor.intercept_response, parsed_response, response_body
+            self._interceptor.intercept_response, parsed_response, response_body, agent_name
         )
 
         # Step 8: Return response
@@ -210,8 +322,8 @@ class ProxyServer:
             resp_headers["X-Qise-Metrics"] = self._shield.metrics.brief()
         return web.json_response(response_body, headers=resp_headers)
 
-    def _upstream_url(self, path: str) -> str:
-        base = self._config.upstream_base_url.rstrip("/")
+    def _upstream_url(self, path: str, upstream_base_url: str | None = None) -> str:
+        base = (upstream_base_url if upstream_base_url is not None else self._config.upstream_base_url).rstrip("/")
         if not path.startswith("/"):
             path = "/" + path
         if base.endswith("/v1") and path.startswith("/v1/"):
@@ -222,13 +334,24 @@ class ProxyServer:
         self,
         request: web.Request,
         forward_body: dict[str, Any],
+        *,
+        path_override: str | None = None,
+        route: ResolvedProxyRoute | None = None,
+        agent_name: str = "",
     ) -> web.StreamResponse:
         """Handle streaming (SSE) chat completion requests.
 
         Uses SSEStreamHandler to process chunks with guard interception.
         """
-        path = "/" + request.match_info.get("path", "")
-        upstream_url = self._upstream_url(path)
+        route = route or self._resolve_route(request, forward_body, agent_name)
+        path = path_override or self._canonical_path_and_agent("/" + request.match_info.get("path", ""))[1]
+        if not route.upstream_base_url:
+            resp = web.json_response(
+                {"error": "Proxy upstream is not configured for this Agent route."},
+                status=502,
+            )
+            return resp  # type: ignore[return-value]
+        upstream_url = self._upstream_url(path, route.upstream_base_url)
 
         # Build headers
         headers = {}
@@ -236,12 +359,12 @@ class ProxyServer:
             key_lower = key.lower()
             if key_lower in ("host", "content-length", "transfer-encoding", "accept"):
                 continue
-            if key_lower == "authorization" and self._config.upstream_api_key:
+            if key_lower == "authorization" and route.upstream_api_key:
                 continue
             headers[key] = value
 
-        if self._config.upstream_api_key:
-            headers["Authorization"] = f"Bearer {self._config.upstream_api_key}"
+        if route.upstream_api_key:
+            headers["Authorization"] = f"Bearer {route.upstream_api_key}"
 
         session = await self._get_session()
 
@@ -270,7 +393,7 @@ class ProxyServer:
         await stream_resp.prepare(request)
 
         # Process the SSE stream
-        handler = SSEStreamHandler(self._interceptor)
+        handler = SSEStreamHandler(self._interceptor, agent_name=route.agent_name or agent_name)
         async for chunk in handler.process_stream(upstream_resp):
             await stream_resp.write(chunk)
 
@@ -278,23 +401,40 @@ class ProxyServer:
         await stream_resp.write_eof()
         return stream_resp
 
-    async def _forward_request(self, request: web.Request) -> web.Response:
+    async def _forward_request(
+        self,
+        request: web.Request,
+        *,
+        path_override: str | None = None,
+        agent_name: str = "",
+    ) -> web.Response:
         """Forward a request to the upstream without interception."""
         body = await request.json() if request.method in ("POST", "PUT", "PATCH") else None
-        return await self._forward_to_upstream(request, body)
+        return await self._forward_to_upstream(
+            request, body, path_override=path_override, route=self._resolve_route(request, body, agent_name)
+        )
 
     async def _forward_to_upstream(
         self,
         request: web.Request,
         body: dict[str, Any] | None = None,
+        *,
+        path_override: str | None = None,
+        route: ResolvedProxyRoute | None = None,
     ) -> web.Response:
         """Forward the request to the upstream LLM API.
 
         Replaces the request's Host header and Authorization with the
         upstream's base URL and API key.
         """
-        path = "/" + request.match_info.get("path", "")
-        upstream_url = self._upstream_url(path)
+        route = route or self._resolve_route(request, body)
+        if not route.upstream_base_url:
+            return web.json_response(
+                {"error": "Proxy upstream is not configured for this Agent route."},
+                status=502,
+            )
+        path = path_override or self._canonical_path_and_agent("/" + request.match_info.get("path", ""))[1]
+        upstream_url = self._upstream_url(path, route.upstream_base_url)
 
         # Build headers — forward most, but replace auth
         headers = {}
@@ -302,12 +442,12 @@ class ProxyServer:
             key_lower = key.lower()
             if key_lower in ("host", "content-length", "transfer-encoding"):
                 continue
-            if key_lower == "authorization" and self._config.upstream_api_key:
+            if key_lower == "authorization" and route.upstream_api_key:
                 continue  # Will be replaced
             headers[key] = value
 
-        if self._config.upstream_api_key:
-            headers["Authorization"] = f"Bearer {self._config.upstream_api_key}"
+        if route.upstream_api_key:
+            headers["Authorization"] = f"Bearer {route.upstream_api_key}"
 
         # Get or create HTTP session
         session = await self._get_session()

@@ -15,7 +15,7 @@ pip install -e ".[proxy]"
 ## Run the Safe Demo
 
 ```bash
-./scripts/demo_mvp.sh
+bash ./scripts/demo_mvp.sh
 ```
 
 The script uses temporary `QISE_HOME` and `QISE_AGENT_HOME` directories, so it does not touch your real `~/.codex` config.

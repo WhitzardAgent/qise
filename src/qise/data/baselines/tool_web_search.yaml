@@ -1,0 +1,10 @@
+content_hash: 87a26bed4fe1f2f72a3bd654a8d81a6f37bbb59f0b7712cb92c564292dd8b53a
+content_length: 175
+item_id: web_search
+item_type: tool
+metadata:
+  description_preview: Search the web using Brave Search API. Supports region-specific
+    and localized search via country and language parameters. Returns titles, URLs,
+    and snippets for fast research.
+registered_at: '2026-05-08T12:59:05.698166+00:00'
+source: ''

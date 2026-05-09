@@ -1,0 +1,9 @@
+content_hash: eca4a4cadae3f3faa410accd0209df9aeb2541ea40533c9412efa7d2a7dcbe6d
+content_length: 105
+item_id: subagents
+item_type: tool
+metadata:
+  description_preview: List, kill, or steer spawned sub-agents for this requester
+    session. Use this for sub-agent orchestration.
+registered_at: '2026-05-08T12:59:05.696868+00:00'
+source: ''

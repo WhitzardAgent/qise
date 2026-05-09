@@ -20,6 +20,7 @@ from qise.product.service import (
     now_iso,
     save_state,
     start_managed_services,
+    state_path,
     stop_managed_services,
 )
 
@@ -62,7 +63,7 @@ AGENTS: dict[str, AgentSpec] = {
         key="openclaw",
         display_name="OpenClaw",
         cli_names=("openclaw", "claw"),
-        config_paths=("~/.openclaw/config.json", "~/.config/openclaw/config.json", "~/.claw/config.json"),
+        config_paths=("~/.openclaw/openclaw.json", "~/.openclaw/config.json", "~/.config/openclaw/config.json", "~/.claw/config.json"),
         config_format="json",
         note="OpenAI-compatible protection via local Qise proxy.",
     ),
@@ -165,6 +166,26 @@ def _merge_upstream(primary: UpstreamInfo, fallback: UpstreamInfo) -> UpstreamIn
     return fallback
 
 
+def _state_upstream(agent_key: str, *, proxy_port: int) -> UpstreamInfo:
+    state = load_state()
+    protected = state.get("protected_agents", {})
+    record = protected.get(agent_key, {}) if isinstance(protected, dict) else {}
+    if not isinstance(record, dict):
+        return UpstreamInfo()
+
+    base_url = str(record.get("upstream_url") or "").rstrip("/")
+    if not base_url or _is_local_proxy_url(base_url, proxy_port):
+        return UpstreamInfo()
+
+    env_key = str(record.get("proxy_env_key") or record.get("upstream_api_key_env") or "")
+    return UpstreamInfo(
+        base_url=base_url,
+        api_key_env=env_key,
+        api_key=_env_value(env_key),
+        source=f"{state_path()}:protected_agents.{agent_key}",
+    )
+
+
 def detect_agents() -> list[dict[str, Any]]:
     state = load_state()
     protected = state.get("protected_agents", {})
@@ -192,7 +213,7 @@ class AgentConfigManager:
     def __init__(self, spec: AgentSpec, *, proxy_port: int = 8822, proxy_env_key: str = "OPENAI_API_KEY") -> None:
         self.spec = spec
         self.proxy_port = proxy_port
-        self.proxy_url = f"http://127.0.0.1:{proxy_port}/v1"
+        self.proxy_url = f"http://127.0.0.1:{proxy_port}/agent/{spec.key}/v1"
         self.proxy_env_key = proxy_env_key or "OPENAI_API_KEY"
 
     def detect(self) -> dict[str, Any]:
@@ -398,16 +419,8 @@ class AgentConfigManager:
             data = {}
         if not isinstance(data, dict):
             data = {"original_config": data}
+        data.pop("qise", None)
         patched = self._patch_json_base_urls(data)
-        qise = data.setdefault("qise", {})
-        if isinstance(qise, dict):
-            qise.update({
-                "protected": True,
-                "proxy_base_url": self.proxy_url,
-                "proxy_env_key": self.proxy_env_key,
-                "agent": self.spec.key,
-                "updated_at": now_iso(),
-            })
         if not patched:
             data["base_url"] = self.proxy_url
         return json.dumps(data, indent=2, sort_keys=True) + "\n"
@@ -479,7 +492,8 @@ def protect_agent(
         return 2, f"{spec.display_name} was not detected. Install it first or create its config file."
 
     inferred_upstream = manager.infer_upstream(config_file)
-    upstream = _merge_upstream(configured_upstream, inferred_upstream)
+    state_upstream = _state_upstream(key, proxy_port=proxy_port)
+    upstream = _merge_upstream(configured_upstream, _merge_upstream(inferred_upstream, state_upstream))
     if not upstream.base_url:
         return 2, (
             "Proxy upstream is not configured and Qise could not infer it from the Agent config. "
@@ -487,9 +501,19 @@ def protect_agent(
             "integration.proxy.upstream_url / QISE_PROXY_UPSTREAM_URL."
         )
 
-    proxy_env_key = upstream.api_key_env or inferred_upstream.api_key_env or "OPENAI_API_KEY"
+    proxy_env_key = upstream.api_key_env or inferred_upstream.api_key_env or state_upstream.api_key_env or "OPENAI_API_KEY"
     manager = AgentConfigManager(spec, proxy_port=proxy_port, proxy_env_key=proxy_env_key)
-    backup_root = manager.backup_config(config_file)
+
+    state = load_state()
+    protected = state.setdefault("protected_agents", {})
+    existing_record = protected.get(key, {}) if isinstance(protected, dict) else {}
+    existing_backup_raw = str(existing_record.get("backup_path", "")) if isinstance(existing_record, dict) else ""
+    existing_backup = Path(existing_backup_raw) if existing_backup_raw else None
+    if existing_backup is not None and (existing_backup / "backup.json").exists():
+        backup_root = existing_backup
+    else:
+        backup_root = manager.backup_config(config_file)
+
     try:
         manager.patch_config(config_file, backup_root)
         if not manager.verify_patch(config_file):
@@ -527,7 +551,7 @@ def protect_agent(
         f"Backup: {backup_root}\n"
         f"Agent base URL: {manager.proxy_url}\n"
         f"Upstream: {upstream.base_url}{source_note}\n"
-        f"Agent API key env: {proxy_env_key}\n"
+        f"Provider API key env used by Agent: {proxy_env_key}\n"
         f"Run `qise restore {key}` to restore the original config."
     )
 

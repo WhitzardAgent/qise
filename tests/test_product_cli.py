@@ -76,6 +76,23 @@ def test_scan_mcp_dangerous(tmp_path: Path) -> None:
     assert "curl pipe to shell" in result.stdout
 
 
+def test_scan_ignores_package_integrity_hash(tmp_path: Path) -> None:
+    target = tmp_path / "skill"
+    target.mkdir()
+    (target / "package-lock.json").write_text(json.dumps({
+        "packages": {
+            "node_modules/example": {
+                "version": "1.0.0",
+                "integrity": "sha512-D5vPkgGZ9lfCQnDFlGrQN6NCSUYRgYW9k7amW3qlm9zBI4Sp+alRZVqLZ4yZ2eCXHjw9RVp/L75wjJ7NBQyfEw==",
+            }
+        }
+    }))
+
+    result = _run(["scan", "skill", str(target)], tmp_path)
+    assert result.returncode == 0
+    assert "Verdict: PASS" in result.stdout
+
+
 
 
 def test_protect_restore_codex_config(tmp_path: Path) -> None:
@@ -100,7 +117,7 @@ env_key = "OPENAI_API_KEY"
     assert "Codex is protected" in protected.stdout
     patched_text = codex_config.read_text()
     assert "qise-proxy" in patched_text
-    assert "http://127.0.0.1:8822/v1" in patched_text
+    assert "http://127.0.0.1:8822/agent/codex/v1" in patched_text
     assert 'env_key = "OPENAI_API_KEY"' in patched_text
     assert patched_text.count('model_provider = "qise-proxy"') == 1
 
@@ -182,9 +199,20 @@ def test_protect_restore_openclaw_json_config(tmp_path: Path) -> None:
     protected = _run(["protect", "openclaw"], tmp_path, env)
     assert protected.returncode == 0
     patched = json.loads(openclaw_config.read_text())
-    assert patched["provider"]["base_url"] == "http://127.0.0.1:8822/v1"
-    assert patched["qise"]["protected"] is True
-    assert patched["qise"]["proxy_env_key"] == "OPENCLAW_API_KEY"
+    assert patched["provider"]["base_url"] == "http://127.0.0.1:8822/agent/openclaw/v1"
+    assert "qise" not in patched
+    state = json.loads((tmp_path / "qise-home" / "state.json").read_text())
+    assert state["protected_agents"]["openclaw"]["proxy_env_key"] == "OPENCLAW_API_KEY"
+    first_backup = state["protected_agents"]["openclaw"]["backup_path"]
+
+    reprotected = _run(["protect", "openclaw"], tmp_path, env)
+    assert reprotected.returncode == 0
+    assert "https://api.openclaw.example/v1" in reprotected.stdout
+    patched_again = json.loads(openclaw_config.read_text())
+    assert patched_again["provider"]["base_url"] == "http://127.0.0.1:8822/agent/openclaw/v1"
+    assert "qise" not in patched_again
+    state = json.loads((tmp_path / "qise-home" / "state.json").read_text())
+    assert state["protected_agents"]["openclaw"]["backup_path"] == first_backup
 
     restored = _run(["restore", "openclaw"], tmp_path, env)
     assert restored.returncode == 0

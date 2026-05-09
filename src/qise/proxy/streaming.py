@@ -71,9 +71,11 @@ class SSEStreamHandler:
         self,
         interceptor: ProxyInterceptor,
         session_id: str | None = None,
+        agent_name: str = "",
     ) -> None:
         self._interceptor = interceptor
         self._session_id = session_id
+        self._agent_name = agent_name
         self._parser = ResponseParser()
         self._state = StreamState.IDLE
 
@@ -228,6 +230,7 @@ class SSEStreamHandler:
             result = self._interceptor.intercept_response(
                 parsed=self._parser.parse(self._build_response_body(buf)),
                 raw_body={},
+                agent_name=self._agent_name,
             )
 
             if result.action == "block" and self._interceptor._config and self._interceptor._config.block_on_guard_block:
@@ -312,6 +315,7 @@ class SSEStreamHandler:
                 "choices": [{"message": {"role": "assistant", "content": full_text}}],
             }),
             raw_body={},
+            agent_name=self._agent_name,
         )
 
         if result.action in ("warn", "block"):

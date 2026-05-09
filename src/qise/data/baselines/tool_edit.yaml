@@ -1,0 +1,9 @@
+content_hash: 1ca6219b44afd2633ee4033700f5cc9bd77bf65335d14410b304f31521439cf1
+content_length: 129
+item_id: edit
+item_type: tool
+metadata:
+  description_preview: Edit a file by replacing exact text. The oldText must match
+    exactly (including whitespace). Use this for precise, surgical edits.
+registered_at: '2026-05-08T12:59:05.691337+00:00'
+source: ''

@@ -1,0 +1,9 @@
+content_hash: c9db848bc01c17db00a034013c9a9292db4b25709232d4fb94d869b8aa6c68eb
+content_length: 97
+item_id: sessions_yield
+item_type: tool
+metadata:
+  description_preview: End your current turn. Use after spawning subagents to receive
+    their results as the next message.
+registered_at: '2026-05-08T12:59:05.695640+00:00'
+source: ''

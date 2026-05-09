@@ -65,6 +65,7 @@ _SUSPICIOUS_DOMAINS = re.compile(
     r'https?://(?:[^\s/]+\.)?(?:evil|pastebin|ngrok|webhook|requestbin)\.[^\s)\]\'"]+',
     re.IGNORECASE,
 )
+_INTEGRITY_ALGORITHM_RE = re.compile(r"\bsha(?:256|384|512)-$", re.IGNORECASE)
 
 
 @dataclass
@@ -113,6 +114,20 @@ def _snippet(text: str, start: int, end: int, *, window: int = 80) -> str:
     lo = max(0, start - window)
     hi = min(len(text), end + window)
     return " ".join(text[lo:hi].split())
+
+
+def _looks_like_integrity_hash(text: str, start: int, end: int, *, path: str) -> bool:
+    """True for package-manager integrity hashes such as integrity: sha512-..."""
+    lower_path = path.lower()
+    if any(name in lower_path for name in ("package-lock", "pnpm-lock", "yarn.lock")):
+        return True
+
+    prefix = text[max(0, start - 12):start]
+    if _INTEGRITY_ALGORITHM_RE.search(prefix):
+        return True
+
+    window = text[max(0, start - 80): min(len(text), end + 24)].lower()
+    return "integrity" in window and re.search(r"sha(?:256|384|512)-", window) is not None
 
 
 def _finding(
@@ -201,8 +216,11 @@ def _scan_text(text: str, *, path: str, target_type: str = "skill") -> list[Find
             rule_id="network.suspicious_domain",
         ))
     for pattern, rule_id, desc in _OBFUSCATION_PATTERNS:
-        match = pattern.search(text)
-        if match:
+        for match in pattern.finditer(text):
+            if rule_id == "obfuscation.base64" and _looks_like_integrity_hash(
+                text, match.start(), match.end(), path=path
+            ):
+                continue
             findings.append(_finding(
                 verdict="warn",
                 category="skill_supply_chain",

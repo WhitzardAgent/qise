@@ -59,6 +59,7 @@ class ProxyInterceptor:
         self,
         parsed: ParsedRequest,
         raw_body: dict[str, Any],
+        agent_name: str = "",
     ) -> ProxyDecision:
         """Intercept a chat completion request.
 
@@ -80,10 +81,10 @@ class ProxyInterceptor:
             for name in self._shield.config.guards.enabled
         }
 
-        # Check each user message for injection
+        # Check user messages and tool results for injection
         for msg in parsed.messages:
-            if msg.role == "user" and msg.content:
-                trust_boundary = msg.trust_boundary or "user_input"
+            if msg.role in {"user", "tool"} and msg.content:
+                trust_boundary = msg.trust_boundary or ("tool_result" if msg.role == "tool" else "user_input")
                 ctx = GuardContext(
                     tool_name="content_check",
                     tool_args={"content": msg.content},
@@ -140,6 +141,7 @@ class ProxyInterceptor:
             action_type="request",
             action_name=self._request_action_name(parsed),
             resource=self._request_resource(parsed),
+            agent_name=agent_name,
         )
         return decision
 
@@ -147,6 +149,7 @@ class ProxyInterceptor:
         self,
         parsed: ParsedResponse,
         raw_body: dict[str, Any],
+        agent_name: str = "",
     ) -> ProxyDecision:
         """Intercept a chat completion response.
 
@@ -221,6 +224,7 @@ class ProxyInterceptor:
             action_type="tool_call" if parsed.tool_calls else "output",
             action_name=parsed.tool_calls[0].tool_name if parsed.tool_calls else "output",
             resource=parsed.tool_calls[0].tool_args if parsed.tool_calls else parsed.content,
+            agent_name=agent_name,
         )
         return decision
 
@@ -232,6 +236,7 @@ class ProxyInterceptor:
         action_type: str,
         action_name: str = "",
         resource: Any = "",
+        agent_name: str = "",
     ) -> None:
         if decision.action not in {"warn", "block"}:
             return
@@ -244,6 +249,7 @@ class ProxyInterceptor:
                 action_type=action_type,
                 action_name=action_name,
                 resource=resource,
+                agent_name=agent_name,
                 blocked_by=self._blocked_by(decision),
                 warnings=decision.warnings,
                 guard_results=decision.guard_results,
@@ -259,13 +265,15 @@ class ProxyInterceptor:
     def _request_action_name(self, parsed: ParsedRequest) -> str:
         if parsed.tools:
             return parsed.tools[0].name
+        if any(msg.role == "tool" and msg.content for msg in parsed.messages):
+            return "tool_result"
         return "content_check"
 
     def _request_resource(self, parsed: ParsedRequest) -> Any:
         if parsed.tools:
             return {"tool": parsed.tools[0].name, "description": parsed.tools[0].description}
         for msg in parsed.messages:
-            if msg.role == "user" and msg.content:
+            if msg.role in {"user", "tool"} and msg.content:
                 return msg.content
         return {"model": parsed.model}
 

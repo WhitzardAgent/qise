@@ -1,0 +1,8 @@
+content_hash: 5bfe82df48d60cc8cc9fcc71876aa219d8edb5a080ffb0ccf7654f176d4dc7fa
+content_length: 36
+item_id: sessions_history
+item_type: tool
+metadata:
+  description_preview: Fetch message history for a session.
+registered_at: '2026-05-08T12:59:05.694469+00:00'
+source: ''

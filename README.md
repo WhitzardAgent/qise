@@ -22,7 +22,7 @@ cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[proxy]"
-./scripts/demo_mvp.sh
+bash ./scripts/demo_mvp.sh
 ```
 
 You will see Qise protect a temporary Codex config, block a dangerous command, write a security event, and restore the config.
@@ -92,6 +92,13 @@ qise stop
 ```
 
 These scripts are safe to run repeatedly. They use temporary `QISE_HOME` and `QISE_AGENT_HOME` directories.
+You can also use the Python wrappers:
+
+```bash
+python ./scripts/demo_mvp.py
+python ./scripts/demo_scan.py
+```
+
 
 ## Supported Agents
 

@@ -1,0 +1,9 @@
+content_hash: 55a311046570345bb99ca0c8f69b7b1b92fe0d957a785341847c45cb8ee1e784
+content_length: 129
+item_id: web_fetch
+item_type: tool
+metadata:
+  description_preview: "Fetch and extract readable content from a URL (HTML \u2192\
+    \ markdown/text). Use for lightweight page access without browser automation."
+registered_at: '2026-05-08T12:59:05.698783+00:00'
+source: ''

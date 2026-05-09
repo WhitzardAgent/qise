@@ -1,0 +1,10 @@
+content_hash: 8abaa1dea62b4157fc560d3101065b8e39be4f7b80781b620db6079039507c85
+content_length: 206
+item_id: session_status
+item_type: tool
+metadata:
+  description_preview: "Show a /status-equivalent session status card (usage + time\
+    \ + cost when available). Use for model-use questions (\U0001F4CA session_status).\
+    \ Optional: set per-session model override (model=default resets overr"
+registered_at: '2026-05-08T12:59:05.697455+00:00'
+source: ''

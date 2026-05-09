@@ -1,0 +1,10 @@
+content_hash: f8a1d7cf1ecfe02b1b5865c93387e6a5891e5079117b4fe18614b6f912521727
+content_length: 298
+item_id: read
+item_type: tool
+metadata:
+  description_preview: Read the contents of a file. Supports text files and images
+    (jpg, png, gif, webp). Images are sent as attachments. For text files, output
+    is truncated to 2000 lines or 50KB (whichever is hit first). U
+registered_at: '2026-05-08T12:59:05.690165+00:00'
+source: ''

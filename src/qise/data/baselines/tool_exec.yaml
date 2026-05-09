@@ -1,0 +1,10 @@
+content_hash: 53e008b6a6eeddc33dd48804d619506cd250dbd4b537419ff9e4e8418d0b38ff
+content_length: 181
+item_id: exec
+item_type: tool
+metadata:
+  description_preview: Execute shell commands with background continuation. Use yieldMs/background
+    to continue later via process tool. Use pty=true for TTY-required commands (terminal
+    UIs, coding agents).
+registered_at: '2026-05-08T12:59:05.692655+00:00'
+source: ''

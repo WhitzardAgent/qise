@@ -22,7 +22,7 @@ cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[proxy]"
-./scripts/demo_mvp.sh
+bash ./scripts/demo_mvp.sh
 ```
 
 你会看到 Qise 保护一个临时 Codex 配置、阻断危险命令、写入安全事件，并恢复配置。
@@ -90,6 +90,13 @@ qise stop
 ```
 
 两个脚本都会使用临时 `QISE_HOME` 和 `QISE_AGENT_HOME`，可以反复运行。
+也可以使用 Python 包装脚本：
+
+```bash
+python ./scripts/demo_mvp.py
+python ./scripts/demo_scan.py
+```
+
 
 ## Agent 支持状态
 

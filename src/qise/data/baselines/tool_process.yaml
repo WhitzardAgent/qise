@@ -1,0 +1,9 @@
+content_hash: 82f0a33215f66e71bd852be1cb7a2fd3b113c8ddf1841ad7e3809e6e00b74102
+content_length: 85
+item_id: process
+item_type: tool
+metadata:
+  description_preview: 'Manage running exec sessions: list, poll, log, write, send-keys,
+    submit, paste, kill.'
+registered_at: '2026-05-08T12:59:05.693301+00:00'
+source: ''

@@ -1,0 +1,10 @@
+content_hash: 7a86d21f47ab37ac725c403bc5db69996af65b03ff0ec80629fc15f0ea2f0d1d
+content_length: 151
+item_id: memory_get
+item_type: tool
+metadata:
+  description_preview: Safe snippet read from MEMORY.md or memory/*.md with optional
+    from/lines; use after memory_search to pull only the needed lines and keep context
+    small.
+registered_at: '2026-05-08T12:59:05.700084+00:00'
+source: ''
