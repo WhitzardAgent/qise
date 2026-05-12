@@ -84,6 +84,31 @@ qise stop
 
 `protect` modifies the Agent config only after making a backup under `~/.qise/backups/...`.
 
+## Second-Layer Local SLM
+
+Use one command to enable the local 4B semantic defense layer:
+
+```bash
+qise slm start
+qise slm status
+```
+
+By default Qise uses local Ollama with `qwen3:4b`. On first run, Qise will try to install Ollama and pull the model if they are missing. Advanced users can point Qise at another OpenAI-compatible SLM endpoint:
+
+```bash
+qise slm start --model llama3.2:3b
+qise slm start --base-url http://localhost:8000/v1 --model my-security-model
+qise slm stop --keep-server
+```
+
+Disable the SLM layer:
+
+```bash
+qise slm stop
+```
+
+After changing SLM state, restart Qise proxy/protection with `qise stop` and `qise protect <agent>` if it was already running.
+
 ## Demo Scripts
 
 ```bash

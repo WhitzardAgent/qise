@@ -82,6 +82,31 @@ qise stop
 
 `protect` 会先备份 Agent 配置，备份保存在 `~/.qise/backups/...`。
 
+## 第二层本地 SLM
+
+普通用户可以用一条命令启用 4B 本地语义防护层：
+
+```bash
+qise slm start
+qise slm status
+```
+
+默认会使用本机 Ollama 和 `qwen3:4b`。首次运行时，如果缺少 Ollama 或模型，Qise 会尝试自动安装/下载。高级用户可以手动指定 OpenAI-compatible 模型服务：
+
+```bash
+qise slm start --model llama3.2:3b
+qise slm start --base-url http://localhost:8000/v1 --model my-security-model
+qise slm stop --keep-server
+```
+
+关闭第二层防护：
+
+```bash
+qise slm stop
+```
+
+修改 SLM 状态后，如果 Qise proxy 已经在运行，需要重新执行 `qise stop` 和 `qise protect <agent>` 让新配置生效。
+
 ## Demo 脚本
 
 ```bash

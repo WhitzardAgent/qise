@@ -109,8 +109,8 @@ def _extract_content_from_response(data: dict[str, Any]) -> str:
         return content
 
     # Content is empty — model may have used all tokens for thinking.
-    # Try to extract useful info from reasoning_content.
-    reasoning = message.get("reasoning_content", "")
+    # Try to extract useful info from Ollama/Qwen reasoning fields.
+    reasoning = message.get("reasoning_content", "") or message.get("reasoning", "")
     if reasoning:
         # The reasoning often contains the intended JSON output.
         # Try to extract it.
@@ -436,7 +436,7 @@ class ModelRouter:
         Raises:
             ModelUnavailableError: If embedding model is not configured.
         """
-        config = self._require_config("embedding")
+        self._require_config("embedding")
         raise ModelUnavailableError(
             "Embedding-based similar-attack retrieval not yet implemented. "
             "Configure an embedding endpoint for future support."

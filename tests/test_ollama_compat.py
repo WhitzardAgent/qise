@@ -6,15 +6,15 @@ including Qwen3 thinking mode (reasoning_content).
 """
 from __future__ import annotations
 
-import pytest
+import os
 
+from qise.core.config import ShieldConfig
 from qise.models.router import (
     ModelConfig,
     ModelRouter,
     _extract_content_from_response,
     _parse_json_response,
 )
-
 
 # ---------------------------------------------------------------------------
 # Ollama response fixtures
@@ -136,6 +136,21 @@ class TestExtractContent:
         # Should extract from reasoning
         assert "verdict" in result
         assert "pass" in result
+
+    def test_ollama_reasoning_field_without_content(self) -> None:
+        """Ollama may return `reasoning` rather than `reasoning_content`."""
+        data = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "reasoning": "Analysis... Final Answer: {\"verdict\": \"safe\", \"confidence\": 0.91}",
+                }
+            }]
+        }
+        result = _extract_content_from_response(data)
+        assert "verdict" in result
+        assert "safe" in result
 
     def test_thinking_mode_json_in_reasoning(self) -> None:
         """Qwen3 thinking mode: JSON verdict embedded in reasoning."""
@@ -292,9 +307,6 @@ class TestShieldConfigOllama:
 
     def test_ollama_env_override(self) -> None:
         """QISE_SLM_BASE_URL env var overrides config."""
-        import os
-        from qise.core.config import ShieldConfig
-
         os.environ["QISE_SLM_BASE_URL"] = "http://localhost:11434/v1"
         os.environ["QISE_SLM_MODEL"] = "qwen3:4b"
         try:

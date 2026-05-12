@@ -108,6 +108,30 @@ def _build_parser() -> argparse.ArgumentParser:
     # qise stop
     subparsers.add_parser("stop", help="Stop Qise managed services")
 
+    # qise slm
+    slm_parser = subparsers.add_parser("slm", help="Manage Qise local SLM protection")
+    slm_subparsers = slm_parser.add_subparsers(dest="slm_command")
+    slm_start = slm_subparsers.add_parser("start", help="Start and configure Qise second-layer SLM")
+    slm_start.add_argument("--model", default="qwen3:4b", help="SLM model name (default: qwen3:4b)")
+    slm_start.add_argument(
+        "--base-url",
+        default="http://localhost:11434/v1",
+        help="OpenAI-compatible SLM base URL (default: local Ollama)",
+    )
+    slm_start.add_argument("--api-key", default="", help="Optional API key for a custom SLM endpoint")
+    slm_start.add_argument("--timeout-ms", type=int, default=10000, help="SLM request timeout in milliseconds")
+    slm_start.add_argument("--no-install", action="store_true", help="Do not auto-install Ollama if missing")
+    slm_start.add_argument("--no-pull", action="store_true", help="Do not auto-pull the Ollama model if missing")
+    slm_start.add_argument("--no-verify", action="store_true", help="Write config without verifying chat/completions")
+    slm_stop = slm_subparsers.add_parser("stop", help="Disable Qise second-layer SLM")
+    slm_stop.add_argument(
+        "--keep-server",
+        action="store_true",
+        help="Disable Qise SLM but leave local model server running",
+    )
+    slm_status = slm_subparsers.add_parser("status", help="Show Qise SLM status")
+    slm_status.add_argument("--json", action="store_true", help="Output JSON")
+
     # qise scan
     scan_parser = subparsers.add_parser("scan", help="Preflight scan Agent assets")
     scan_subparsers = scan_parser.add_subparsers(dest="scan_command")
@@ -467,6 +491,40 @@ def _cmd_stop(args: argparse.Namespace) -> int:
     for line in notes:
         print(line)
     return 1 if notes else 0
+
+
+def _cmd_slm(args: argparse.Namespace) -> int:
+    from qise.product.slm import render_slm_status, slm_status, start_slm, stop_slm
+
+    if not args.slm_command:
+        print("Error: specify an SLM command: qise slm start|stop|status", file=sys.stderr)
+        return 1
+
+    if args.slm_command == "start":
+        result = start_slm(
+            config_path=args.config,
+            model=args.model,
+            base_url=args.base_url,
+            api_key=args.api_key,
+            timeout_ms=args.timeout_ms,
+            no_install=args.no_install,
+            no_pull=args.no_pull,
+            no_verify=args.no_verify,
+        )
+        print(result.message)
+        return result.code
+
+    if args.slm_command == "stop":
+        result = stop_slm(config_path=args.config, keep_server=args.keep_server)
+        print(result.message)
+        return result.code
+
+    if args.slm_command == "status":
+        print(render_slm_status(slm_status(config_path=args.config), json_output=args.json))
+        return 0
+
+    print(f"Error: unknown SLM command '{args.slm_command}'", file=sys.stderr)
+    return 1
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -859,6 +917,7 @@ def main() -> None:
         "protect": _cmd_protect,
         "restore": _cmd_restore,
         "stop": _cmd_stop,
+        "slm": _cmd_slm,
         "scan": _cmd_scan,
         "version": _cmd_version,
     }

@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -42,6 +44,60 @@ def test_events_empty_store(tmp_path: Path) -> None:
     result = _run(["events"], tmp_path)
     assert result.returncode == 0
     assert "No security events yet" in result.stdout
+
+
+def test_slm_status_runs(tmp_path: Path) -> None:
+    config = tmp_path / "shield.yaml"
+    result = _run(["--config", str(config), "slm", "status", "--json"], tmp_path)
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["configured"] is False
+    assert payload["provider"] == "none"
+
+
+def test_slm_start_custom_config_and_stop(tmp_path: Path) -> None:
+    config = tmp_path / "shield.yaml"
+
+    start = _run([
+        "--config",
+        str(config),
+        "slm",
+        "start",
+        "--base-url",
+        "http://localhost:8000/v1",
+        "--model",
+        "my-security-model",
+        "--timeout-ms",
+        "12345",
+        "--api-key",
+        "test-key",
+        "--no-verify",
+    ], tmp_path)
+    assert start.returncode == 0
+    assert "Qise SLM Start" in start.stdout
+    assert "Verification skipped" in start.stdout
+
+    data = yaml.safe_load(config.read_text())
+    slm = data["models"]["slm"]
+    assert slm["base_url"] == "http://localhost:8000/v1"
+    assert slm["model"] == "my-security-model"
+    assert slm["timeout_ms"] == 12345
+    assert slm["api_key"] == "test-key"
+
+    state = json.loads((tmp_path / "qise-home" / "state.json").read_text())
+    assert state["slm"]["provider"] == "OpenAI-compatible"
+    assert state["slm"]["model"] == "my-security-model"
+
+    stop = _run(["--config", str(config), "slm", "stop", "--keep-server"], tmp_path)
+    assert stop.returncode == 0
+    assert "Disabled Qise SLM config" in stop.stdout
+    assert "--keep-server" in stop.stdout
+
+    stopped_data = yaml.safe_load(config.read_text())
+    stopped_slm = stopped_data["models"]["slm"]
+    assert stopped_slm["base_url"] == ""
+    assert stopped_slm["model"] == ""
+    assert "api_key" not in stopped_slm
 
 
 def test_scan_mcp_safe(tmp_path: Path) -> None:
@@ -83,7 +139,10 @@ def test_scan_ignores_package_integrity_hash(tmp_path: Path) -> None:
         "packages": {
             "node_modules/example": {
                 "version": "1.0.0",
-                "integrity": "sha512-D5vPkgGZ9lfCQnDFlGrQN6NCSUYRgYW9k7amW3qlm9zBI4Sp+alRZVqLZ4yZ2eCXHjw9RVp/L75wjJ7NBQyfEw==",
+                "integrity": (
+                    "sha512-D5vPkgGZ9lfCQnDFlGrQN6NCSUYRgYW9k7amW3qlm9zBI4Sp+"
+                    "alRZVqLZ4yZ2eCXHjw9RVp/L75wjJ7NBQyfEw=="
+                ),
             }
         }
     }))

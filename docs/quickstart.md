@@ -33,6 +33,31 @@ qise events --limit 10
 qise events --limit 10 --json
 ```
 
+## Enable Local SLM
+
+Qise works in rule-only mode by default. To enable the second-layer local 4B SLM:
+
+```bash
+qise slm start
+qise slm status
+```
+
+Advanced options:
+
+```bash
+qise slm start --model llama3.2:3b
+qise slm start --base-url http://localhost:8000/v1 --model my-security-model
+qise slm stop --keep-server
+```
+
+Disable the SLM layer:
+
+```bash
+qise slm stop
+```
+
+Restart Qise protection after changing SLM state if the proxy was already running.
+
 ## Protect Codex
 
 If Codex is installed and has a config, run:
