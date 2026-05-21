@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from qise.product.service import ensure_qise_home, events_path, now_iso
+from qise.product.service import ensure_qise_home, events_path, load_state, now_iso
 
 SCHEMA_VERSION = "0.1"
 
@@ -39,6 +39,11 @@ _PRODUCT_RISK_CATEGORIES = {
     "output": "Secret Leakage",
     "tool_policy": "Policy Violation",
     "agent_config": "Agent Configuration",
+    "runtime": "Runtime Observation",
+    "runtime_observation": "Runtime Observation",
+    "process": "Runtime Process",
+    "file_change": "Runtime File Changes",
+    "network_observation": "Runtime Network",
 }
 
 
@@ -157,6 +162,7 @@ def make_event(
     mode: str = "enforce",
     blocked_by: list[str] | None = None,
     raw_ref: str = "",
+    correlation_id: str = "",
 ) -> dict[str, Any]:
     category_label = product_risk_category(category)
     blocked = blocked_by if blocked_by is not None else ([category] if verdict == "block" else [])
@@ -169,6 +175,7 @@ def make_event(
         decision=EventDecision(verdict=verdict, mode=mode, blocked_by=blocked),
         evidence=[EventEvidence(**item) for item in evidence or []],
         recommendation=recommendation,
+        correlation_id=correlation_id or f"corr_{uuid.uuid4().hex[:12]}",
         raw_ref=raw_ref,
     )
     return event.model_dump(mode="json")
@@ -217,6 +224,7 @@ def guard_event_from_results(
     warnings: list[str] | None = None,
     guard_results: list[dict[str, Any]] | None = None,
     recommendation: str = "",
+    correlation_id: str = "",
 ) -> dict[str, Any]:
     """Build a product event from guard pipeline output.
 
@@ -259,6 +267,7 @@ def guard_event_from_results(
             if normalized_verdict == "block"
             else "Qise observed suspicious behavior. Review the evidence before continuing."
         )
+    correlation_id = correlation_id or _active_runtime_correlation(agent_name)
     return make_event(
         stage=stage,
         source=source,
@@ -274,13 +283,161 @@ def guard_event_from_results(
         evidence=evidence,
         recommendation=recommendation,
         blocked_by=[blocked_by] if normalized_verdict == "block" and blocked_by else None,
+        correlation_id=correlation_id,
     )
+
+
+def _active_runtime_correlation(agent_name: str = "") -> str:
+    try:
+        runs = load_state().get("runtime_runs", {})
+    except Exception:
+        return ""
+    if not isinstance(runs, dict):
+        return ""
+    active: list[tuple[str, dict[str, Any]]] = []
+    for corr_id, record in runs.items():
+        if not isinstance(record, dict):
+            continue
+        if record.get("status") != "running":
+            continue
+        if agent_name and record.get("agent") not in {agent_name, ""}:
+            continue
+        active.append((str(corr_id), record))
+    if not active and agent_name:
+        for corr_id, record in runs.items():
+            if isinstance(record, dict) and record.get("status") == "running":
+                active.append((str(corr_id), record))
+    if not active:
+        return ""
+    active.sort(key=lambda item: str(item[1].get("updated_at") or item[1].get("started_at") or ""))
+    return active[-1][0]
 
 
 def record_guard_event(**kwargs: Any) -> Path:
     """Append a WARN/BLOCK guard event to the local JSONL event store."""
     event = guard_event_from_results(**kwargs)
     return append_event(event)
+
+
+
+
+def record_runtime_event(
+    *,
+    agent_name: str,
+    command: list[str],
+    cwd: str,
+    pid: int,
+    returncode: int | None,
+    duration_s: float,
+    correlation_id: str,
+    stdout_summary: str = "",
+    stderr_summary: str = "",
+    process_tree: list[dict[str, Any]] | None = None,
+    file_changes: dict[str, Any] | None = None,
+    network: list[dict[str, Any]] | None = None,
+) -> Path:
+    """Append a runtime-observer event to the product event store."""
+    evidence: list[dict[str, Any]] = [
+        {
+            "type": "runtime",
+            "message": f"Observed process pid={pid}, exit={returncode}, duration={duration_s:.2f}s.",
+            "snippet": " ".join(command),
+        },
+        {
+            "type": "runtime",
+            "message": f"Working directory: {cwd}",
+        },
+    ]
+
+    process_tree = process_tree or []
+    file_changes = file_changes or {"added": [], "modified": [], "deleted": [], "truncated": False}
+    network = network or []
+
+    if process_tree:
+        commands = [str(item.get("command", "")) for item in process_tree if item.get("command")]
+        evidence.append({
+            "type": "process",
+            "message": f"Process tree sampled: {len(process_tree)} process(es).",
+            "snippet": _safe_snippet(commands, max_len=360),
+        })
+    if stdout_summary:
+        evidence.append({
+            "type": "stdout",
+            "message": "stdout summary captured by Qise Runtime Observer.",
+            "snippet": _safe_snippet(stdout_summary, max_len=360),
+        })
+    if stderr_summary:
+        evidence.append({
+            "type": "stderr",
+            "message": "stderr summary captured by Qise Runtime Observer.",
+            "snippet": _safe_snippet(stderr_summary, max_len=360),
+        })
+    changed_count = sum(len(file_changes.get(key, [])) for key in ("added", "modified", "deleted"))
+    if changed_count:
+        evidence.append({
+            "type": "file_change",
+            "message": (
+                f"File changes: +{len(file_changes.get('added', []))}, "
+                f"~{len(file_changes.get('modified', []))}, "
+                f"-{len(file_changes.get('deleted', []))}."
+            ),
+            "snippet": _safe_snippet(file_changes, max_len=360),
+        })
+    if network:
+        evidence.append({
+            "type": "network",
+            "message": f"Observed network endpoint(s): {len(network)}.",
+            "snippet": _safe_snippet(network, max_len=360),
+        })
+
+    suspicious = _runtime_suspicious(command, process_tree, network)
+    verdict = "warn" if suspicious or (returncode not in (0, None)) else "pass"
+    recommendation = (
+        "Qise observed runtime behavior worth reviewing. Check process, file, and network evidence."
+        if verdict == "warn"
+        else "Runtime behavior was recorded for audit correlation."
+    )
+    event = make_event(
+        stage="runtime",
+        source="observer",
+        verdict=verdict,
+        category="runtime_observation",
+        severity="medium" if verdict == "warn" else "low",
+        confidence=0.8 if verdict == "warn" else 0.4,
+        action_type="process",
+        action_name=agent_name,
+        resource={
+            "command": command,
+            "cwd": cwd,
+            "pid": pid,
+            "returncode": returncode,
+            "duration_s": round(duration_s, 3),
+        },
+        agent_name=agent_name,
+        session_id=correlation_id,
+        evidence=evidence,
+        recommendation=recommendation,
+        mode="observe",
+        correlation_id=correlation_id,
+    )
+    return append_event(event)
+
+
+def _runtime_suspicious(command: list[str], process_tree: list[dict[str, Any]], network: list[dict[str, Any]]) -> bool:
+    joined = " ".join(command + [str(item.get("command", "")) for item in process_tree]).lower()
+    suspicious_tokens = [
+        "curl ",
+        "wget ",
+        "| bash",
+        "| sh",
+        "rm -rf /",
+        "/etc/shadow",
+        "chmod 777",
+        "sudo ",
+        "nc ",
+        "netcat",
+    ]
+    return any(token in joined for token in suspicious_tokens) or bool(network)
 
 
 def append_event(event: dict[str, Any]) -> Path:
@@ -292,7 +449,7 @@ def append_event(event: dict[str, Any]) -> Path:
     return path
 
 
-def load_events(*, limit: int = 50, since: str | None = None) -> list[dict[str, Any]]:
+def load_events(*, limit: int = 50, since: str | None = None, stage: str | None = None) -> list[dict[str, Any]]:
     path = events_path()
     if not path.exists():
         return []
@@ -310,6 +467,8 @@ def load_events(*, limit: int = 50, since: str | None = None) -> list[dict[str, 
             ts = _parse_timestamp(str(event.get("timestamp", "")))
             if ts is None or ts < since_dt:
                 continue
+        if stage and str(event.get("stage", "")).lower() != stage.lower():
+            continue
         events.append(event)
     if limit > 0:
         events = events[-limit:]

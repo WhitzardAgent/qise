@@ -16,6 +16,7 @@ from qise.product.service import (
     load_state,
     state_path,
 )
+from qise.product.slm import slm_status
 
 
 def load_config(config_path: str | None = None) -> tuple[ShieldConfig, str]:
@@ -42,6 +43,7 @@ def get_status(config_path: str | None = None) -> dict[str, Any]:
         "services": state.get("services", {}),
         "proxy": check_port("127.0.0.1", proxy_port).__dict__,
         "bridge": check_port("127.0.0.1", bridge_port).__dict__,
+        "slm": slm_status(config_path=config_path),
         "protected_agents": state.get("protected_agents", {}),
         "detected_agents": detect_agents(),
         "events_24h": {
@@ -68,6 +70,8 @@ def render_status(status: dict[str, Any], *, json_output: bool = False) -> str:
     if status["bridge"]["status"] == "in_use" and bridge_state == "in_use":
         bridge_state = "listening"
     qise_running = bool(services) or status["proxy"]["status"] == "in_use" or status["bridge"]["status"] == "in_use"
+    slm = status.get("slm", {})
+    slm_ready = slm.get("verification") == "ready"
     lines = [
         "Qise Status",
         "",
@@ -79,6 +83,13 @@ def render_status(status: dict[str, Any], *, json_output: bool = False) -> str:
         f"  Qise running: {'yes' if qise_running else 'no'}",
         f"  Proxy  127.0.0.1:{status['proxy']['port']}: {proxy_state}",
         f"  Bridge 127.0.0.1:{status['bridge']['port']}: {bridge_state}",
+        "",
+        "SLM",
+        f"  Configured: {'yes' if slm.get('configured') else 'no'}",
+        f"  Provider: {slm.get('provider', 'none')}",
+        f"  Model: {slm.get('model') or '(none)'}",
+        f"  Endpoint: {slm.get('base_url') or '(none)'}",
+        f"  Ready: {'yes' if slm_ready else 'no'} ({slm.get('verification', 'unknown')})",
         "",
         "Protection",
         f"  Protected agents: {', '.join(sorted(protected)) if protected else 'none'}",

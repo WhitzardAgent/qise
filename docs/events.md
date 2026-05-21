@@ -8,6 +8,7 @@ Qise writes local JSONL security events to `~/.qise/events.jsonl` by default.
 qise events --limit 10
 qise events --limit 10 --json
 qise events --since 1h
+qise events --stage runtime
 ```
 
 ## Schema
@@ -42,6 +43,7 @@ Current MVP event sources:
 | --- | --- |
 | `scan` | `qise scan ...` preflight results |
 | `cli-check` | `qise check ...` guard checks |
+| `observer` | `qise run ...` runtime process/file/network observations |
 | `proxy` | Python proxy interception decisions |
 | `bridge` | Python bridge guard decisions |
 

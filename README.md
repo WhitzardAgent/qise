@@ -33,8 +33,11 @@ Qise MVP has three product surfaces:
 
 | Surface | What it does | Current status |
 | --- | --- | --- |
-| `qise protect codex` | Backs up Codex config, routes it through local Qise proxy, restores on demand | Verified MVP |
+| `qise status` / `qise doctor` | Shows proxy, protected Agents, event, and SLM readiness | Verified MVP |
+| `qise protect codex` / `qise protect openclaw` | Backs up Agent config, routes it through local Qise proxy, restores on demand | Verified MVP |
 | `qise scan skill/mcp` | Preflight scans third-party skills and MCP configs before use | Verified MVP |
+| `qise slm start/status/stop` | Optional local semantic review layer via Ollama or a custom OpenAI-compatible endpoint | Verified MVP |
+| `qise run --agent <name> -- ...` | Runtime Observer wrapper for process, stdout/stderr, file diff, and network evidence | Phase 6 MVP |
 | `qise events` | Shows explainable local JSONL security events with evidence and recommendations | Verified MVP |
 
 Qise is not a model provider. In proxy mode it sits between your Agent and the model API the Agent already uses:
@@ -109,6 +112,17 @@ qise slm stop
 
 After changing SLM state, restart Qise proxy/protection with `qise stop` and `qise protect <agent>` if it was already running.
 
+## Runtime Observer
+
+Run an Agent or test command under Qise's lightweight runtime observer:
+
+```bash
+qise run --agent codex -- codex
+qise events --stage runtime --limit 10
+```
+
+This records the Agent process, sampled child processes, working directory file changes, stdout/stderr summaries, best-effort network endpoints, and a `correlation_id` for later proxy/runtime evidence correlation. It is a user-space wrapper, not kernel-level auditing.
+
 ## Demo Scripts
 
 ```bash
@@ -171,4 +185,5 @@ Qise MVP currently verifies local CLI/product flows: protect/restore, proxy inte
 - [Claude Code status](./docs/claude-code.md)
 - [Preflight scan](./docs/preflight-scan.md)
 - [Events](./docs/events.md)
+- [Runtime Observer](./docs/runtime-observer.md)
 - [Troubleshooting](./docs/troubleshooting.md)

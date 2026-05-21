@@ -57,14 +57,14 @@ class RuleChecker(ABC):
 # ---------------------------------------------------------------------------
 
 
-class AIGuardBase(ABC):
+class AIGuardBase:
     """Base class for all guards.
 
     Even rule-only guards inherit from this (set primary_strategy="rules").
 
     Three-layer decision flow:
         Layer 0: Rule fast-path (0ms) — deterministic BLOCK/PASS shortcuts
-        Layer 1: SLM fast-screen (<50ms) — quick risk classification
+        Layer 1: SLM semantic screen — model/server-dependent risk classification
         Layer 2: LLM deep analysis (<2s) — full trajectory reasoning
         Layer 3: Rule fallback — never fail-open
     """
@@ -109,7 +109,6 @@ class AIGuardBase(ABC):
         not a finding). Rule WARN with confidence >= slm_override_rule_warn_threshold
         cannot be overridden.
         """
-        start = time.monotonic()
         result = self._check_impl(context)
         # Record metrics if available
         if hasattr(self, "_metrics") and self._metrics is not None:
@@ -155,20 +154,25 @@ class AIGuardBase(ABC):
                 latency_ms=_elapsed_ms(start),
             )
 
-        # Layer 1: SLM fast-screen (<50ms)
+        # Layer 1: SLM semantic screen (model/server dependent)
         try:
             slm_result = self._slm_check(context)
-            if slm_result.confidence >= self.slm_confidence_threshold:
-                if slm_result.verdict != GuardVerdict.ESCALATE:
-                    slm_result.latency_ms = _elapsed_ms(start)
-                    # SLM cannot downgrade a high-confidence rule WARN to PASS.
-                    # Low-confidence rule WARNs (trust boundary isolation, < 0.65)
-                    # can be overridden since SLM provides actual content analysis.
-                    if rule_warn is not None and slm_result.verdict == GuardVerdict.PASS:
-                        if rule_warn.confidence >= self.slm_override_rule_warn_threshold:
-                            return rule_warn
-                    return slm_result
-                # ESCALATE → fall through to LLM
+            if (
+                slm_result.confidence >= self.slm_confidence_threshold
+                and slm_result.verdict != GuardVerdict.ESCALATE
+            ):
+                slm_result.latency_ms = _elapsed_ms(start)
+                # SLM cannot downgrade a high-confidence rule WARN to PASS.
+                # Low-confidence rule WARNs (trust boundary isolation, < 0.65)
+                # can be overridden since SLM provides actual content analysis.
+                if (
+                    rule_warn is not None
+                    and slm_result.verdict == GuardVerdict.PASS
+                    and rule_warn.confidence >= self.slm_override_rule_warn_threshold
+                ):
+                    return rule_warn
+                return slm_result
+            # ESCALATE → fall through to LLM
         except ModelUnavailableError:
             pass  # Degrade to LLM or rule fallback
 
@@ -218,7 +222,7 @@ class AIGuardBase(ABC):
 
         Requires: A local SLM (≤4B params) deployed with an OpenAI-compatible
         API endpoint, e.g., AgentDoG-Qwen3-4B via vLLM or Ollama.
-        Target latency: <50ms.
+        Latency depends on the selected local model and server.
         """
         if self._model_router is None:
             raise ModelUnavailableError("ModelRouter not configured")

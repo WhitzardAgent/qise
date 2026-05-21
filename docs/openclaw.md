@@ -16,6 +16,7 @@ qise restore openclaw
 Qise currently checks these paths:
 
 ```text
+~/.openclaw/openclaw.json
 ~/.openclaw/config.json
 ~/.config/openclaw/config.json
 ~/.claw/config.json

@@ -1,0 +1,70 @@
+version: "1.0"
+
+# MVP default: proxy is the main product path.
+integration:
+  mode: proxy
+  proxy:
+    port: 8822
+    auto_takeover: true
+    crash_recovery: true
+
+# Rule-only mode works with empty model settings.
+# Run `qise slm start` to fill models.slm automatically.
+models:
+  slm:
+    base_url: ""
+    model: ""
+    timeout_ms: 10000
+  llm:
+    base_url: ""
+    model: ""
+    timeout_ms: 5000
+  embedding:
+    base_url: ""
+    model: ""
+
+guards:
+  enabled:
+    - prompt
+    - command
+    - credential
+    - reasoning
+    - filesystem
+    - network
+    - exfil
+    - resource
+    - audit
+    - tool_sanity
+    - context
+    - output
+    - tool_policy
+    - supply_chain
+  config:
+    prompt:
+      mode: observe
+    reasoning:
+      mode: observe
+    exfil:
+      mode: observe
+    tool_sanity:
+      mode: observe
+    context:
+      mode: observe
+    supply_chain:
+      mode: observe
+    output:
+      mode: observe
+    audit:
+      mode: observe
+    resource:
+      mode: observe
+
+data:
+  threat_patterns_dir: "./data/threat_patterns"
+  security_contexts_dir: "./data/security_contexts"
+  baselines_dir: "./data/baselines"
+
+logging:
+  level: INFO
+  format: json
+  output: stderr

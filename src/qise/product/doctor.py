@@ -11,6 +11,7 @@ from typing import Any
 from qise import __version__
 from qise.product.agents import detect_agents
 from qise.product.service import DEFAULT_BRIDGE_PORT, check_port, ensure_qise_home, events_path
+from qise.product.slm import slm_status as get_slm_status
 from qise.product.status import load_config
 
 
@@ -67,14 +68,26 @@ def run_doctor(config_path: str | None = None) -> dict[str, Any]:
         errors.append(f"Event log is not writable: {exc}")
         checks.append({"name": "Event log", "status": "error", "detail": str(exc)})
 
-    slm_detail = "not configured"
-    slm_status = "warning"
-    if config and config.models.slm.base_url and config.models.slm.model:
-        slm_detail = f"{config.models.slm.model} at {config.models.slm.base_url}"
-        slm_status = "ok"
-    else:
-        warnings.append("Local SLM is optional and not configured.")
-    checks.append({"name": "SLM", "status": slm_status, "detail": slm_detail})
+    try:
+        slm_report = get_slm_status(config_path=config_path)
+        if slm_report["configured"]:
+            slm_detail = f"{slm_report['model']} at {slm_report['base_url']}"
+            if slm_report["verification"] == "ready":
+                slm_check_status = "ok"
+                slm_detail += " (ready)"
+            else:
+                slm_check_status = "warning"
+                slm_detail += f" ({slm_report['verification']})"
+                warnings.append("Local SLM is configured but not ready. Run `qise slm status` or `qise slm start`.")
+        else:
+            slm_detail = "not configured"
+            slm_check_status = "warning"
+            warnings.append("Local SLM is optional and not configured.")
+    except Exception as exc:
+        slm_detail = f"status check failed: {exc}"
+        slm_check_status = "warning"
+        warnings.append(f"Could not check local SLM status: {exc}")
+    checks.append({"name": "SLM", "status": slm_check_status, "detail": slm_detail})
 
     agents = detect_agents()
     if not any(agent["installed"] for agent in agents):

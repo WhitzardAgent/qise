@@ -20,7 +20,7 @@ Qise is organized as a layered system with three integration modes ranging from 
 │  │  • Response 拦截: 检查 LLM 响应中的危险指令/行为                    │ │
 │  │  • Tool Call 拦截: 解析 tool_use 请求, 运行 Guard Pipeline          │ │
 │  │  • Tool Result 拦截: 检查 tool_result 中的注入内容                  │ │
-│  │  适用于: Claude Code, Codex, Gemini CLI 等 OpenAI-compatible API    │ │
+│  │  适用于: Codex / OpenClaw / 自定义 OpenAI-compatible Agent        │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
 │  ┌── Mode B: MCP Mode (Zero-Code) ────────────────────────────────────┐ │
@@ -63,7 +63,7 @@ Qise is organized as a layered system with three integration modes ranging from 
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
 │  ┌── Model Layer ─────────────────────────────────────────────────────┐ │
-│  │  SLM (≤4B, <50ms) │ LLM (8B-70B, <2s) │ Embedding (<10ms)         │ │
+│  │  SLM (≤4B, latency depends on local model) │ LLM │ Embedding       │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -79,7 +79,7 @@ Qise 的核心设计原则：**用户不需要改一行 Agent 代码就能获得
 **原理**: Qise 启动一个本地 HTTP 代理服务器，拦截 Agent 与 LLM 之间的所有 API 请求。通过解析 OpenAI-compatible API 的请求/响应格式，在流量层面实现安全检查。
 
 ```
-Agent (Claude Code / Codex / Gemini CLI)
+Agent (Codex / OpenClaw / custom OpenAI-compatible)
     │
     │ API Request (OpenAI-compatible format)
     ▼
@@ -133,7 +133,7 @@ Agent (Claude Code / Codex / Gemini CLI)
 4. 退出时自动恢复原始配置
 5. 崩溃恢复: 启动时检测未恢复的配置并自动修复
 
-**适用 Agent**: 所有使用 OpenAI-compatible API 的 Agent（Claude Code, Codex, Gemini CLI 等）
+**适用 Agent**: 当前 MVP 验证 Codex、OpenClaw 和自定义 OpenAI-compatible Agent。Claude Code 原生 Anthropic `/v1/messages` 接入仍是 experimental。
 
 **优势**: 零代码, 完整轨迹访问, 自动拦截
 **劣势**: 需要理解 API 协议细节; 流式响应(SSE)处理复杂; 对非 OpenAI-compatible 的 Agent 不适用
@@ -405,7 +405,7 @@ class AIGuardBase:
             if rule_result.verdict in (GuardVerdict.BLOCK, GuardVerdict.PASS):
                 return rule_result
 
-        # Layer 1: SLM fast-screen (<50ms)
+        # Layer 1: SLM semantic screen (model/server dependent)
         try:
             slm_result = self._slm_check(context)
             if slm_result.confidence >= self.slm_confidence_threshold:
@@ -517,7 +517,7 @@ The model router manages connections to SLM, LLM, and embedding models:
 
 ```python
 class ModelRouter:
-    slm_client: OpenAICompatibleClient    # Local SLM, <50ms
+    slm_client: OpenAICompatibleClient    # Local SLM, latency depends on model/server
     llm_client: OpenAICompatibleClient    # Cloud/local LLM, <2s
     embedding_client: OpenAICompatibleClient  # Vector model, <10ms
 
@@ -535,7 +535,7 @@ All clients use the OpenAI-compatible API format, enabling any provider:
 | Path | Guards | Latency | Frequency |
 |------|--------|---------|-----------|
 | Rule fast-path | A2, A3, A6, C1 | <1ms | ~60% of calls |
-| SLM fast-screen | B1-B4, A1, A4, A5, C3, D2 | 30-50ms | ~35% of calls |
+| SLM semantic screen | B1-B4, A1, A4, A5, C3, D2 | model/server dependent | optional |
 | LLM deep analysis | B1-B4, A4, C2 | 1-3s | <5% of calls |
 
 ### Model Selection

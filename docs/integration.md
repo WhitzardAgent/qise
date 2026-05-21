@@ -6,9 +6,9 @@ Qise offers three integration modes, ranging from zero-code desktop usage to dev
 
 | Mode | Code Required | Defense Depth | Best For |
 |------|--------------|---------------|----------|
-| **Proxy Mode** | 0 lines | Full (4 layers) | Desktop users, non-developers |
+| **Proxy Mode** | 0 lines | Runtime proxy guard pipeline | Current CLI product path |
 | **MCP Mode** | 0 lines | Partial (hard defense only) | MCP ecosystem users |
-| **SDK Mode** | 1-5 lines | Full (4 layers) + lowest latency | Agent developers |
+| **SDK Mode** | 1-5 lines | Deep framework hooks | Agent developers |
 
 ---
 
@@ -29,31 +29,36 @@ Agent ──API Request──▶ Qise Proxy ──Forwarded Request──▶ LLM
                        Agent ◀──Modified Response── Qise Proxy ◀──API Response──
 ```
 
-### Desktop App Setup (One-Click)
+### Current CLI Setup
 
-1. Install Qise desktop app
-2. Click "Enable Protection" in system tray
-3. Qise automatically:
-   - Starts the local proxy server
-   - Backs up your Agent's current API configuration
-   - Switches the API endpoint to `http://localhost:8822/v1`
-   - Stores your original API key securely
-4. Your Agent now routes through Qise — protection is active
+The desktop app is a later productization phase. The current MVP uses CLI commands:
 
-### Proxy Takeover (inspired by cc-switch)
+```bash
+qise protect codex
+qise protect openclaw
+qise status
+```
 
-The proxy takeover process:
+`qise protect` currently:
+
+1. Starts Qise-managed local services when needed.
+2. Backs up the Agent's current configuration under `~/.qise/backups/...`.
+3. Rewrites OpenAI-compatible base-url fields to `http://127.0.0.1:8822/agent/<agent>/v1`.
+4. Records Qise metadata, original endpoint, and API-key environment variable name in `~/.qise/state.json`. It does not need to copy the provider secret itself when the Agent already uses an environment variable.
+5. Restores the original config with `qise restore <agent>` or `qise restore all`.
+
+### Protect Flow (inspired by cc-switch)
 
 ```
 Before:
-  Agent config → api_key: "sk-ant-xxx" → endpoint: "https://api.anthropic.com"
+  Agent config → env_key: "OPENAI_API_KEY" → endpoint: "https://api.example.com/v1"
 
-After Takeover:
-  Agent config → api_key: "QISE_MANAGED" → endpoint: "http://localhost:8822/v1"
-  Qise stores:  original_key = "sk-ant-xxx", original_endpoint = "https://api.anthropic.com"
+After protect:
+  Agent config → env_key: "OPENAI_API_KEY" → endpoint: "http://127.0.0.1:8822/agent/codex/v1"
+  Qise state  → original_endpoint = "https://api.example.com/v1"
 
-On Exit / Crash Recovery:
-  Agent config → api_key: "sk-ant-xxx" → endpoint: "https://api.anthropic.com"  # Auto-restored
+After restore:
+  Agent config → env_key: "OPENAI_API_KEY" → endpoint: "https://api.example.com/v1"
 ```
 
 ### What the Proxy Inspects
@@ -85,30 +90,30 @@ For agents using streaming responses (SSE), the proxy:
 3. For text content, performs output checks on completed chunks
 4. Does NOT block streaming for text-only responses (low latency impact)
 
-### Supported Agents (Proxy Mode)
+### Supported Agents (Current MVP Proxy Mode)
 
-| Agent | API Format | Proxy Support |
-|-------|-----------|---------------|
-| Claude Code | OpenAI-compatible | Full |
-| Codex (OpenAI) | OpenAI-compatible | Full |
-| Gemini CLI | OpenAI-compatible | Full |
-| OpenClaw | OpenAI-compatible | Full |
-| Hermes | OpenAI-compatible | Full |
-| Custom agents | OpenAI-compatible | Full |
+| Agent | API Format | Current support |
+|-------|-----------|-----------------|
+| Codex | OpenAI-compatible `/v1/chat/completions` | Verified via `qise protect codex` |
+| OpenClaw | OpenAI-compatible `/v1/chat/completions` | Verified via `qise protect openclaw`; config layouts may vary |
+| Custom agents | OpenAI-compatible `/v1/chat/completions` | Manual via `qise protect custom --base-url ...` or proxy config |
+| Claude Code | Commonly Anthropic-native `/v1/messages` | Experimental; do not market as complete native protection yet |
+| Gemini CLI / Hermes | Depends on local configuration | Advanced/manual integration, not a release blocker |
 
 ### CLI Proxy Mode
 
 For users who prefer CLI over the desktop app:
 
 ```bash
-# Start Qise proxy
-qise proxy start --port 8822 --config shield.yaml
+# Recommended product path: auto-back up and patch a known Agent config
+qise protect codex
+qise protect openclaw
 
-# Manually configure your agent to use the proxy
-export OPENAI_API_BASE="http://localhost:8822/v1"
+# Custom OpenAI-compatible Agent
+qise protect custom --base-url https://api.example.com/v1
 
-# Or let Qise auto-configure
-qise proxy takeover --agent claude_code
+# Manual proxy start for advanced users; global --config comes before the command
+qise --config shield.yaml proxy start --port 8822 --upstream https://api.example.com/v1
 ```
 
 ---

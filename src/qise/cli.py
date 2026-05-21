@@ -93,6 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
     events_parser = subparsers.add_parser("events", help="Show Qise security events")
     events_parser.add_argument("--limit", type=int, default=50, help="Maximum events to show")
     events_parser.add_argument("--since", default=None, help="Filter by duration like 1h/30m/2d or ISO timestamp")
+    events_parser.add_argument("--stage", default=None, help="Filter by event stage, e.g. preflight/proxy/runtime")
     events_parser.add_argument("--json", action="store_true", help="Output JSON")
 
     # qise protect
@@ -104,6 +105,18 @@ def _build_parser() -> argparse.ArgumentParser:
     # qise restore
     restore_parser = subparsers.add_parser("restore", help="Restore Agent config modified by Qise")
     restore_parser.add_argument("agent", help="Agent name or 'all'")
+
+    # qise run
+    run_parser = subparsers.add_parser("run", help="Run an Agent under Qise Runtime Observer")
+    run_parser.add_argument("--agent", required=True, help="Agent name for runtime evidence correlation")
+    run_parser.add_argument("--cwd", default=None, help="Working directory for the Agent command")
+    run_parser.add_argument("--poll-interval", type=float, default=1.0, help="Observer polling interval in seconds")
+    run_parser.add_argument(
+        "--no-file-snapshot",
+        action="store_true",
+        help="Disable before/after working directory diff",
+    )
+    run_parser.add_argument("run_command", nargs=argparse.REMAINDER, help="Command to run after --")
 
     # qise stop
     subparsers.add_parser("stop", help="Stop Qise managed services")
@@ -447,7 +460,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 def _cmd_events(args: argparse.Namespace) -> int:
     from qise.product.events import format_events, load_events
 
-    events = load_events(limit=args.limit, since=args.since)
+    events = load_events(limit=args.limit, since=args.since, stage=args.stage)
     if args.json:
         print(json.dumps(events, indent=2, sort_keys=True))
     else:
@@ -474,6 +487,43 @@ def _cmd_restore(args: argparse.Namespace) -> int:
     code, message = restore_agent(args.agent)
     print(message)
     return code
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    from qise.product.runtime import run_observed_command
+
+    command = list(args.run_command or [])
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        print("Error: provide an Agent command after --, e.g. qise run --agent codex -- codex", file=sys.stderr)
+        return 1
+
+    print(
+        f"Qise Runtime Observer: agent={args.agent}, command={' '.join(command)}",
+        file=sys.stderr,
+    )
+    try:
+        result = run_observed_command(
+            agent_name=args.agent,
+            command=command,
+            cwd=args.cwd,
+            poll_interval_s=args.poll_interval,
+            snapshot_files=not args.no_file_snapshot,
+        )
+    except Exception as exc:
+        print(f"Error: runtime observer failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(
+        "Qise Runtime Observer: "
+        f"exit={result.returncode}, correlation_id={result.correlation_id}, "
+        f"processes={len(result.process_tree)}, "
+        f"network={len(result.network)}, "
+        f"file_changes={sum(len(result.file_changes.get(key, [])) for key in ('added', 'modified', 'deleted'))}",
+        file=sys.stderr,
+    )
+    return result.returncode
 
 
 def _cmd_stop(args: argparse.Namespace) -> int:
@@ -570,7 +620,7 @@ version: "1.0"
 
 # Integration mode: proxy | mcp | sdk
 integration:
-  mode: sdk
+  mode: proxy
   proxy:
     port: 8822
     auto_takeover: true
@@ -581,7 +631,7 @@ models:
   slm:
     base_url: ""
     model: ""
-    timeout_ms: 200
+    timeout_ms: 10000
   llm:
     base_url: ""
     model: ""
@@ -916,6 +966,7 @@ def main() -> None:
         "events": _cmd_events,
         "protect": _cmd_protect,
         "restore": _cmd_restore,
+        "run": _cmd_run,
         "stop": _cmd_stop,
         "slm": _cmd_slm,
         "scan": _cmd_scan,

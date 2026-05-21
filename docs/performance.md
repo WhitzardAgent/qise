@@ -32,13 +32,15 @@ Qise is designed for minimal overhead. In rule-only mode (no SLM/LLM), latency i
 
 ## Latency with SLM
 
-When an SLM model is configured, AI-first guards (PromptGuard, ExfilGuard, etc.) add model call latency:
+When an SLM model is configured, AI-first guards such as PromptGuard add model-call latency. The current MVP treats this as an optional second layer:
 
-| Path | Latency | Frequency |
-|------|---------|-----------|
-| Rule fast-path | <1ms | ~60% of calls |
-| SLM fast-screen | 30-50ms | ~35% of calls |
-| LLM deep analysis | 1-3s | <5% of calls |
+| Path | Expected behavior |
+|------|-------------------|
+| Rule fast-path | Sub-millisecond local checks; this remains the default protection layer |
+| Local SLM via Ollama, e.g. `qwen3:4b` | Hardware and model dependent; on a laptop this can be seconds, not milliseconds |
+| Custom optimized security SLM | Future target for low-latency semantic screening |
+
+If the SLM endpoint is slow or unavailable, Qise times out and falls back to rule-based decisions or conservative warnings. Check readiness with `qise slm status` and `qise doctor`.
 
 ## Performance Testing
 
@@ -48,4 +50,4 @@ Run the performance baseline suite:
 pytest tests/test_performance.py -v -s
 ```
 
-All tests assert that p95 latency stays within the budget. If a test fails, it means a regression has increased latency beyond acceptable limits.
+The performance suite covers the rule-only fast path. Real SLM latency should be measured separately for the selected model and hardware.

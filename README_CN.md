@@ -31,8 +31,11 @@ bash ./scripts/demo_mvp.sh
 
 | 产品面 | 能力 | 当前状态 |
 | --- | --- | --- |
-| `qise protect codex` | 备份 Codex 配置，接管到本地 Qise proxy，可恢复 | MVP 已验证 |
+| `qise status` / `qise doctor` | 查看 proxy、已保护 Agent、事件和 SLM 就绪状态 | MVP 已验证 |
+| `qise protect codex` / `qise protect openclaw` | 备份 Agent 配置，接管到本地 Qise proxy，可恢复 | MVP 已验证 |
 | `qise scan skill/mcp` | 安装前扫描第三方 Skill 和 MCP 配置 | MVP 已验证 |
+| `qise slm start/status/stop` | 可选启用本地语义审查层，支持 Ollama 或自定义 OpenAI-compatible endpoint | MVP 已验证 |
+| `qise run --agent <name> -- ...` | Runtime Observer wrapper，记录进程、stdout/stderr、文件 diff 和网络证据 | Phase 6 MVP |
 | `qise events` | 查看带证据和建议的本地安全事件 | MVP 已验证 |
 
 Qise 不是模型服务商。Proxy 模式下，Qise 位于 Agent 和 Agent 原本使用的模型 API 之间：
@@ -106,6 +109,17 @@ qise slm stop
 ```
 
 修改 SLM 状态后，如果 Qise proxy 已经在运行，需要重新执行 `qise stop` 和 `qise protect <agent>` 让新配置生效。
+
+## Runtime Observer
+
+用轻量运行时观察器启动 Agent 或测试命令：
+
+```bash
+qise run --agent codex -- codex
+qise events --stage runtime --limit 10
+```
+
+它会记录 Agent 进程、采样到的子进程、工作目录文件变化、stdout/stderr 摘要、尽力解析的网络 endpoint，以及用于后续和 proxy/runtime 证据关联的 `correlation_id`。这是用户态 wrapper，不是内核级审计。
 
 ## Demo 脚本
 

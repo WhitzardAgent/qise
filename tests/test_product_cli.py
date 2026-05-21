@@ -37,13 +37,115 @@ def test_status_runs_without_services(tmp_path: Path) -> None:
     result = _run(["status"], tmp_path)
     assert result.returncode == 0
     assert "Qise Status" in result.stdout
+    assert "SLM" in result.stdout
+    assert "Configured: no" in result.stdout
     assert "Protected agents" in result.stdout
+
+
+def test_doctor_reports_slm_readiness(tmp_path: Path) -> None:
+    config = tmp_path / "shield.yaml"
+    config.write_text("""
+version: "1.0"
+models:
+  slm:
+    base_url: "http://localhost:11434/v1"
+    model: "missing-test-model"
+    timeout_ms: 1000
+""")
+    result = _run(["--config", str(config), "doctor"], tmp_path)
+    assert result.returncode == 0
+    assert "SLM: missing-test-model at http://localhost:11434/v1" in result.stdout
+    assert "Local SLM is configured but not ready" in result.stdout
 
 
 def test_events_empty_store(tmp_path: Path) -> None:
     result = _run(["events"], tmp_path)
     assert result.returncode == 0
     assert "No security events yet" in result.stdout
+
+
+def test_run_records_runtime_event(tmp_path: Path) -> None:
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    result = _run([
+        "run",
+        "--agent",
+        "test-agent",
+        "--cwd",
+        str(workdir),
+        "--",
+        sys.executable,
+        "-c",
+        "from pathlib import Path; print('runtime-ok'); Path('created.txt').write_text('ok')",
+    ], tmp_path)
+    assert result.returncode == 0
+    assert "runtime-ok" in result.stdout
+    assert "Qise Runtime Observer" in result.stderr
+    assert "correlation_id=corr_" in result.stderr
+
+    events = _run(["events", "--stage", "runtime", "--json"], tmp_path)
+    assert events.returncode == 0
+    payload = json.loads(events.stdout)
+    assert len(payload) == 1
+    event = payload[0]
+    assert event["stage"] == "runtime"
+    assert event["source"] == "observer"
+    assert event["agent"]["name"] == "test-agent"
+    assert event["correlation_id"].startswith("corr_")
+    evidence_text = json.dumps(event["evidence"])
+    assert "runtime-ok" in evidence_text
+    assert "created.txt" in evidence_text
+
+
+
+
+def test_guard_event_uses_active_runtime_correlation(tmp_path: Path) -> None:
+    home = tmp_path / "qise-home"
+    home.mkdir()
+    (home / "state.json").write_text(json.dumps({
+        "runtime_runs": {
+            "corr_manualruntime": {
+                "agent": "codex",
+                "status": "running",
+                "updated_at": "2026-01-01T00:00:00Z",
+            }
+        }
+    }))
+
+    result = _run(["check", "bash", '{"command": "rm -rf /"}'], tmp_path)
+    assert result.returncode != 0
+
+    events = _run(["events", "--json"], tmp_path)
+    payload = json.loads(events.stdout)
+    assert payload[-1]["correlation_id"] == "corr_manualruntime"
+
+
+def test_events_stage_filter(tmp_path: Path) -> None:
+    check = _run(["check", "bash", '{"command": "rm -rf /"}'], tmp_path)
+    assert check.returncode != 0
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    run = _run([
+        "run",
+        "--agent",
+        "test-agent",
+        "--cwd",
+        str(workdir),
+        "--",
+        sys.executable,
+        "-c",
+        "print('ok')",
+    ], tmp_path)
+    assert run.returncode == 0
+
+    runtime_events = _run(["events", "--stage", "runtime", "--json"], tmp_path)
+    payload = json.loads(runtime_events.stdout)
+    assert payload
+    assert all(event["stage"] == "runtime" for event in payload)
+
+    proxy_events = _run(["events", "--stage", "proxy", "--json"], tmp_path)
+    assert json.loads(proxy_events.stdout) == []
 
 
 def test_slm_status_runs(tmp_path: Path) -> None:
