@@ -26,6 +26,32 @@ function modeBadgeClass(mode: string): string {
   }
 }
 
+function guardModeBtnClass(mode: string, active: boolean): string {
+  if (!active) return "qise-guard-mode-btn qise-guard-mode-btn-inactive";
+  switch (mode) {
+    case "observe":
+      return "qise-guard-mode-btn qise-guard-mode-btn-active-observe";
+    case "enforce":
+      return "qise-guard-mode-btn qise-guard-mode-btn-active-enforce";
+    case "off":
+      return "qise-guard-mode-btn qise-guard-mode-btn-active-off";
+    default:
+      return "qise-guard-mode-btn qise-guard-mode-btn-inactive";
+  }
+}
+
+const PIPELINE_ICONS: Record<string, string> = {
+  ingress: "↓",
+  egress: "↑",
+  output: "⊙",
+};
+
+const PIPELINE_ICON_CLASSES: Record<string, string> = {
+  ingress: "qise-pipeline-ingress",
+  egress: "qise-pipeline-egress",
+  output: "qise-pipeline-output",
+};
+
 export default function GuardList({ guards, onSetMode }: GuardListProps) {
   // Group by pipeline
   const grouped = guards.reduce(
@@ -43,26 +69,30 @@ export default function GuardList({ guards, onSetMode }: GuardListProps) {
       {["ingress", "egress", "output"].map((pipeline) => {
         const pipelineGuards = grouped[pipeline];
         if (!pipelineGuards) return null;
+        const icon = PIPELINE_ICONS[pipeline] || "";
+        const iconClass = PIPELINE_ICON_CLASSES[pipeline] || "";
 
         return (
           <div key={pipeline}>
-            <h3 className="text-sm text-[#9c9c9d] mb-3 uppercase tracking-wider">
-              {PIPELINE_LABELS[pipeline] || pipeline}
-            </h3>
-            <div className="qise-card p-4 space-y-2">
+            <div className="qise-pipeline-header">
+              <span className={`qise-pipeline-icon ${iconClass}`}>{icon}</span>
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                {PIPELINE_LABELS[pipeline] || pipeline}
+              </h3>
+              <span className="text-xs text-[var(--text-dim)]">{pipelineGuards.length} guards</span>
+            </div>
+            <div className="space-y-1">
               {pipelineGuards.map((guard) => (
-                <div
-                  key={guard.name}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-[#1b1c1e]"
-                >
+                <div key={guard.name} className="qise-guard-row">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono text-[#f9f9f9]">
+                    <span className="text-sm font-mono font-semibold text-[var(--text-primary)]">
                       {guard.name}
                     </span>
                     <span className={modeBadgeClass(guard.mode)}>
-                      {guard.mode}
+                      <span className="badge-dot" />
+                      {guard.mode.toUpperCase()}
                     </span>
-                    <span className="text-xs text-[#6a6b6c]">
+                    <span className="rounded-full bg-white px-2 py-1 text-[11px] font-mono text-[var(--text-dim)] ring-1 ring-[var(--border-subtle)]">
                       {guard.primary_strategy === "ai" ? "AI-first" : "Rules"}
                     </span>
                   </div>
@@ -70,11 +100,7 @@ export default function GuardList({ guards, onSetMode }: GuardListProps) {
                     {MODES.map((mode) => (
                       <button
                         key={mode}
-                        className={`text-xs px-2 py-1 rounded transition-opacity ${
-                          guard.mode === mode
-                            ? "bg-[#1b1c1e] text-[#f9f9f9]"
-                            : "text-[#6a6b6c] hover:opacity-60"
-                        }`}
+                        className={guardModeBtnClass(mode, guard.mode === mode)}
                         onClick={() => onSetMode(guard.name, mode)}
                       >
                         {mode}

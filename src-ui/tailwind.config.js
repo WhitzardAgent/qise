@@ -4,13 +4,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        "qise-deep": "#07080a",
-        "qise-surface": "#101111",
-        "qise-card": "#1b1c1e",
-        "qise-red": "#FF6363",
-        "qise-blue": "#55b3ff",
-        "qise-green": "#5fc992",
-        "qise-yellow": "#ffbc33",
+        "qise-deep": "#f3f8fc",
+        "qise-surface": "#ffffff",
+        "qise-card": "#edf5fa",
+        "qise-red": "#ff5f6f",
+        "qise-blue": "#2878d8",
+        "qise-green": "#1c9f78",
+        "qise-yellow": "#d99016",
       },
       fontFamily: {
         sans: ['"Inter"', "system-ui", "sans-serif"],

@@ -8,10 +8,11 @@ export default function ProxyToggle({ enabled, onToggle }: ProxyToggleProps) {
     <button
       className={`qise-btn-primary ${
         enabled ? "qise-btn-primary-active" : "qise-btn-primary-inactive"
-      }`}
-      onClick={() => onToggle(!enabled)}
+      } disabled:opacity-50 disabled:cursor-not-allowed`}
+      disabled={!enabled}
+      onClick={() => onToggle(false)}
     >
-      {enabled ? "Protection On" : "Enable Protection"}
+      {enabled ? "Stop Protection" : "Protect Agent First"}
     </button>
   );
 }

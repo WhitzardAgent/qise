@@ -22,6 +22,13 @@ from qise.product.service import load_state, logs_dir, now_iso, save_state
 DEFAULT_SLM_MODEL = "qwen3:4b"
 DEFAULT_SLM_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_SLM_TIMEOUT_MS = 10000
+COMMON_EXECUTABLE_DIRS = (
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/opt/local/bin",
+)
 
 
 @dataclass
@@ -167,21 +174,32 @@ def _pid_running(pid: int | None) -> bool:
     return True
 
 
+def _which(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in COMMON_EXECUTABLE_DIRS:
+        candidate = Path(directory) / name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
 def _install_ollama(lines: list[str], *, no_install: bool = False) -> str:
-    existing = shutil.which("ollama")
+    existing = _which("ollama")
     if existing:
         return existing
     if no_install or os.environ.get("QISE_SLM_NO_INSTALL"):
         raise RuntimeError("Ollama is not installed. Install Ollama or re-run without --no-install.")
 
     system = platform.system()
-    brew = shutil.which("brew")
+    brew = _which("brew")
     if system == "Darwin" and brew:
         lines.append("Ollama not found; installing with Homebrew...")
         subprocess.run([brew, "install", "ollama"], check=True)
     elif system == "Linux":
-        curl = shutil.which("curl")
-        sh = shutil.which("sh")
+        curl = _which("curl")
+        sh = _which("sh")
         if not curl or not sh:
             raise RuntimeError("Ollama is not installed and curl/sh were not found for automatic install.")
         lines.append("Ollama not found; installing from https://ollama.com/install.sh...")
@@ -189,18 +207,18 @@ def _install_ollama(lines: list[str], *, no_install: bool = False) -> str:
     else:
         raise RuntimeError("Ollama is not installed. Install it first, then run `qise slm start` again.")
 
-    installed = shutil.which("ollama")
+    installed = _which("ollama")
     if not installed:
         raise RuntimeError("Ollama installation finished, but the `ollama` command was not found on PATH.")
     return installed
 
 
 def _start_ollama_if_needed(base_url: str, lines: list[str], *, no_install: bool = False) -> tuple[int | None, str]:
-    ollama = _install_ollama(lines, no_install=no_install)
     if _ollama_running(base_url):
         lines.append(f"Ollama server is already running at {_ollama_api_base(base_url)}.")
         return None, "already_running"
 
+    ollama = _install_ollama(lines, no_install=no_install)
     log_dir = logs_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
     stdout_path = log_dir / "slm-ollama.out.log"
@@ -235,7 +253,7 @@ def _pull_ollama_model(base_url: str, model: str, lines: list[str], *, no_pull: 
         return
     if no_pull or os.environ.get("QISE_SLM_NO_PULL"):
         raise RuntimeError(f"Model {model} is not installed. Run `ollama pull {model}` or re-run without --no-pull.")
-    ollama = shutil.which("ollama")
+    ollama = _which("ollama")
     if not ollama:
         raise RuntimeError("Cannot pull model because `ollama` was not found on PATH.")
     lines.append(f"Pulling model {model}. This may take a few minutes...")

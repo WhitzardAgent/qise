@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { ReactNode } from "react";
+import DiagnosticsPanel from "./DiagnosticsPanel";
 
 interface SLMConfig {
   base_url: string;
   model: string;
   timeout_ms: number;
   api_key: string | null;
+  [key: string]: unknown;
 }
 
 interface LLMConfig {
@@ -13,6 +16,7 @@ interface LLMConfig {
   model: string;
   timeout_ms: number;
   api_key: string | null;
+  [key: string]: unknown;
 }
 
 interface GuardConfigEntry {
@@ -20,6 +24,7 @@ interface GuardConfigEntry {
   slm_confidence_threshold: number | null;
   skip_slm_on_rule_pass: boolean | null;
   slm_override_rule_warn_threshold: number | null;
+  [key: string]: unknown;
 }
 
 interface ShieldConfig {
@@ -35,10 +40,16 @@ interface ShieldConfig {
     mode: string;
     proxy: {
       port: number;
+      target_agents?: string[];
       auto_takeover: boolean;
       crash_recovery: boolean;
+      upstream_url?: string;
+      upstream_api_key?: string;
+      [key: string]: unknown;
     };
+    [key: string]: unknown;
   };
+  [key: string]: unknown;
 }
 
 function ConfigCard({
@@ -47,13 +58,13 @@ function ConfigCard({
   unsaved = false,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
   unsaved?: boolean;
 }) {
   return (
     <div className="qise-card p-5">
       <div className="flex items-center gap-2 mb-4">
-        <h3 className="text-sm font-medium text-[#f9f9f9] tracking-wide uppercase">
+        <h3 className="text-sm font-medium text-[var(--text-primary)] tracking-wide uppercase">
           {title}
         </h3>
         {unsaved && (
@@ -80,13 +91,13 @@ function ConfigInput({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <label className="text-sm text-[#9c9c9d] w-36 shrink-0">{label}</label>
+      <label className="text-sm text-[var(--text-tertiary)] w-36 shrink-0">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="flex-1 bg-[#1b1c1e] border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2 text-sm text-[#cecece] font-mono focus:outline-none focus:border-[rgba(255,255,255,0.15)] transition-colors"
+        className="flex-1 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--qise-blue)] transition-colors"
       />
     </div>
   );
@@ -105,11 +116,11 @@ function ConfigSelect({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <label className="text-sm text-[#9c9c9d] w-36 shrink-0">{label}</label>
+      <label className="text-sm text-[var(--text-tertiary)] w-36 shrink-0">{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 bg-[#1b1c1e] border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2 text-sm text-[#cecece] font-mono focus:outline-none focus:border-[rgba(255,255,255,0.15)] transition-colors appearance-none"
+        className="flex-1 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--qise-blue)] transition-colors appearance-none"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -132,11 +143,11 @@ function ConfigToggle({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <label className="text-sm text-[#9c9c9d] w-36 shrink-0">{label}</label>
+      <label className="text-sm text-[var(--text-tertiary)] w-36 shrink-0">{label}</label>
       <button
         onClick={() => onChange(!checked)}
         className={`w-10 h-5 rounded-full transition-colors ${
-          checked ? "bg-qise-green" : "bg-[#3a3b3c]"
+          checked ? "bg-qise-green" : "bg-[var(--indicator-muted)]"
         }`}
       >
         <div
@@ -158,6 +169,7 @@ const GUARD_MODES = [
 export default function ConfigPanel() {
   const [config, setConfig] = useState<ShieldConfig | null>(null);
   const [originalConfig, setOriginalConfig] = useState<ShieldConfig | null>(null);
+  const [configPath, setConfigPath] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,9 +180,13 @@ export default function ConfigPanel() {
 
   async function loadConfig() {
     try {
-      const c = await invoke<ShieldConfig>("get_config");
+      const [c, path] = await Promise.all([
+        invoke<ShieldConfig>("get_config"),
+        invoke<string>("get_config_path"),
+      ]);
       setConfig(c);
       setOriginalConfig(JSON.parse(JSON.stringify(c)));
+      setConfigPath(path);
       setError(null);
     } catch (e) {
       console.error("Failed to load config:", e);
@@ -182,6 +198,8 @@ export default function ConfigPanel() {
 
   async function handleSave() {
     if (!config) return;
+    const target = configPath || "~/.qise/shield.yaml";
+    if (!window.confirm(`Save configuration to ${target}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -209,7 +227,8 @@ export default function ConfigPanel() {
   if (!config) {
     return (
       <div className="qise-card p-6 text-center">
-        <p className="text-sm text-[#6a6b6c]">
+        <p className="inline-flex items-center justify-center gap-2 text-sm text-[var(--text-dim)]">
+          {!error && <span className="qise-spinner qise-spinner-blue" />}
           {error ? `Error: ${error}` : "Loading configuration..."}
         </p>
       </div>
@@ -240,6 +259,23 @@ export default function ConfigPanel() {
         },
       };
     });
+  };
+
+  const updateProxy = (
+    field: keyof ShieldConfig["integration"]["proxy"],
+    value: string | number | boolean | string[],
+  ) => {
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            integration: {
+              ...prev.integration,
+              proxy: { ...prev.integration.proxy, [field]: value },
+            },
+          }
+        : prev,
+    );
   };
 
   const updateGuardConfig = (guardName: string, field: string, value: string | number | boolean | null) => {
@@ -282,28 +318,35 @@ export default function ConfigPanel() {
 
   return (
     <div className="space-y-6">
+      <DiagnosticsPanel />
+
       {/* Action bar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={handleSave}
           disabled={!hasChanges || saving}
           className={`px-5 py-2 rounded-[43px] text-sm font-medium transition-all ${
             hasChanges && !saving
-              ? "bg-[hsla(0,0%,100%,0.815)] text-[#07080a] hover:opacity-60"
-              : "bg-[#1b1c1e] text-[#6a6b6c] cursor-not-allowed"
+              ? "bg-[var(--button-primary-bg)] text-[var(--button-primary-text)] hover:opacity-60"
+              : "bg-[var(--bg-card)] text-[var(--text-dim)] cursor-not-allowed"
           }`}
         >
-          {saving ? "Saving..." : saveSuccess ? "✓ Saved" : "Save"}
+          {saving ? (
+            <span className="inline-flex items-center gap-2"><span className="qise-spinner" />Saving...</span>
+          ) : saveSuccess ? "Saved" : "Save"}
         </button>
         <button
           onClick={handleReset}
-          className="px-5 py-2 rounded-[43px] text-sm font-medium bg-[#1b1c1e] text-[#9c9c9d] hover:opacity-60 transition-all"
+          className="px-5 py-2 rounded-[43px] text-sm font-medium bg-[var(--bg-card)] text-[var(--text-tertiary)] hover:opacity-60 transition-all"
         >
           Reset to Default
         </button>
         {hasChanges && (
           <span className="text-xs text-qise-yellow">Unsaved changes</span>
         )}
+        <span className="text-xs text-[var(--text-dim)] font-mono truncate max-w-full">
+          Target: {configPath || "~/.qise/shield.yaml"}
+        </span>
       </div>
 
       {error && (
@@ -374,54 +417,41 @@ export default function ConfigPanel() {
         <ConfigInput
           label="Proxy Port"
           value={config.integration.proxy.port}
+          onChange={(v) => updateProxy("port", parseInt(v) || 8822)}
+          type="number"
+        />
+        <ConfigInput
+          label="Upstream URL"
+          value={config.integration.proxy.upstream_url ?? ""}
+          onChange={(v) => updateProxy("upstream_url", v)}
+          placeholder="https://api.openai.com/v1"
+        />
+        <ConfigInput
+          label="Upstream API Key"
+          value={config.integration.proxy.upstream_api_key ?? ""}
+          onChange={(v) => updateProxy("upstream_api_key", v)}
+          placeholder="Optional; prefer env vars for real secrets"
+        />
+        <ConfigInput
+          label="Target Agents"
+          value={(config.integration.proxy.target_agents ?? []).join(", ")}
           onChange={(v) =>
-            setConfig((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    integration: {
-                      ...prev.integration,
-                      proxy: { ...prev.integration.proxy, port: parseInt(v) || 8822 },
-                    },
-                  }
-                : prev
+            updateProxy(
+              "target_agents",
+              v.split(",").map((item) => item.trim()).filter(Boolean),
             )
           }
-          type="number"
+          placeholder="codex, openclaw"
         />
         <ConfigToggle
           label="Auto Takeover"
           checked={config.integration.proxy.auto_takeover}
-          onChange={(v) =>
-            setConfig((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    integration: {
-                      ...prev.integration,
-                      proxy: { ...prev.integration.proxy, auto_takeover: v },
-                    },
-                  }
-                : prev
-            )
-          }
+          onChange={(v) => updateProxy("auto_takeover", v)}
         />
         <ConfigToggle
           label="Crash Recovery"
           checked={config.integration.proxy.crash_recovery}
-          onChange={(v) =>
-            setConfig((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    integration: {
-                      ...prev.integration,
-                      proxy: { ...prev.integration.proxy, crash_recovery: v },
-                    },
-                  }
-                : prev
-            )
-          }
+          onChange={(v) => updateProxy("crash_recovery", v)}
         />
       </ConfigCard>
 
@@ -438,7 +468,7 @@ export default function ConfigPanel() {
             return (
               <div
                 key={guardName}
-                className="py-2 px-3 bg-[#1b1c1e] rounded-lg border-l-2 border-[rgba(255,255,255,0.06)]"
+                className="py-2 px-3 bg-[var(--bg-card)] rounded-lg border-l-2 border-[var(--border-subtle)]"
               >
                 <div className="flex items-center gap-3 mb-2">
                   <ConfigToggle

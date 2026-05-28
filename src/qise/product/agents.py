@@ -186,7 +186,13 @@ def _state_upstream(agent_key: str, *, proxy_port: int) -> UpstreamInfo:
     )
 
 
-def detect_agents() -> list[dict[str, Any]]:
+def detect_agents(*, include_missing: bool = False) -> list[dict[str, Any]]:
+    """Detect local Agents that Qise can operate on.
+
+    The product-facing default is intentionally installed-only: ordinary users
+    should only see Agents Qise can actually protect or scan on this machine.
+    `include_missing=True` is kept for diagnostics and developer workflows.
+    """
     state = load_state()
     protected = state.get("protected_agents", {})
     rows: list[dict[str, Any]] = []
@@ -196,7 +202,7 @@ def detect_agents() -> list[dict[str, Any]]:
             (str(path) for path in (_expand_agent_path(p) for p in spec.config_paths) if path.exists()),
             "",
         )
-        rows.append({
+        row = {
             "key": spec.key,
             "name": spec.display_name,
             "installed": bool(cli_path or config_path),
@@ -205,8 +211,39 @@ def detect_agents() -> list[dict[str, Any]]:
             "protected": spec.key in protected,
             "experimental": spec.experimental,
             "note": spec.note,
-        })
+        }
+        if include_missing or row["installed"]:
+            rows.append(row)
     return rows
+
+
+def render_agents(agents: list[dict[str, Any]], *, json_output: bool = False) -> str:
+    if json_output:
+        payload = {
+            "agents": agents,
+            "summary": {
+                "installed": sum(1 for agent in agents if agent.get("installed")),
+                "protected": sum(1 for agent in agents if agent.get("protected")),
+                "returned": len(agents),
+            },
+        }
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    lines = ["Qise Agents", ""]
+    if not agents:
+        lines.append("  No supported Agent CLI/config was detected.")
+        return "\n".join(lines)
+
+    for agent in agents:
+        install = "installed" if agent["installed"] else "not found"
+        protected_text = "protected" if agent["protected"] else "not protected"
+        suffix = " (experimental)" if agent["experimental"] else ""
+        lines.append(f"  {agent['name']}: {install}, {protected_text}{suffix}")
+        if agent.get("cli_path"):
+            lines.append(f"    cli: {agent['cli_path']}")
+        if agent.get("config_path"):
+            lines.append(f"    config: {agent['config_path']}")
+    return "\n".join(lines)
 
 
 class AgentConfigManager:

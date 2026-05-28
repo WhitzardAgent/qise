@@ -1,32 +1,10 @@
-//! Tauri IPC commands — called from the React frontend.
+//! Tauri IPC commands called from the React frontend.
 
 use serde::Serialize;
+use serde_json::Value;
 use tauri::State;
 
-use crate::SharedState;
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-#[derive(Serialize)]
-pub struct AppStatus {
-    protection_enabled: bool,
-    proxy_port: u16,
-    bridge_port: u16,
-    blocked_count: u64,
-    warning_count: u64,
-    slm_status: String,       // "local" / "cloud" / "unavailable"
-    slm_latency_ms: u64,      // most recent SLM call latency
-}
-
-#[derive(Serialize, Clone)]
-pub struct SecurityEvent {
-    timestamp: String,
-    guard_name: String,
-    verdict: String,
-    message: String,
-}
+use crate::{qise_cli, SharedState};
 
 #[derive(Serialize)]
 pub struct GuardInfo {
@@ -36,192 +14,299 @@ pub struct GuardInfo {
     primary_strategy: String,
 }
 
-// ---------------------------------------------------------------------------
-// Commands
-// ---------------------------------------------------------------------------
+#[derive(Serialize)]
+pub struct CommandText {
+    stdout: String,
+    stderr: String,
+    success: bool,
+    exit_status: String,
+}
+
+impl From<qise_cli::QiseOutput> for CommandText {
+    fn from(output: qise_cli::QiseOutput) -> Self {
+        Self {
+            stdout: output.stdout,
+            stderr: output.stderr,
+            success: output.success,
+            exit_status: output.exit_status,
+        }
+    }
+}
 
 #[tauri::command]
-pub async fn toggle_protection(
-    enable: bool,
-    state: State<'_, SharedState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    if enable {
-        // --- Enable: start bridge, then proxy ---
-        let (bridge_port, proxy_port, config_path, upstream_url, upstream_api_key) = {
-            let s = state.lock().await;
-            (
-                s.bridge_port,
-                s.proxy_port,
-                s.config_path.clone(),
-                s.upstream_url.clone(),
-                s.upstream_api_key.clone(),
-            )
-        };
+pub async fn get_status() -> Result<Value, String> {
+    qise_cli::run_json(qise_cli::args_with_default_config(&["status", "--json"])).await
+}
 
-        // Use a default config path if not set
-        let config = if config_path.is_empty() {
-            let home = dirs_home()?;
-            format!("{}/.qise/shield.yaml", home)
-        } else {
-            config_path
-        };
+#[tauri::command]
+pub async fn get_doctor() -> Result<Value, String> {
+    qise_cli::run_json_permissive(qise_cli::args_with_default_config(&["doctor", "--json"])).await
+}
 
-        // Start Bridge first
-        let bridge_handle = crate::bridge::start_bridge(bridge_port, &config).await?;
+#[tauri::command]
+pub async fn get_slm_status() -> Result<Value, String> {
+    qise_cli::run_json_permissive(qise_cli::args_with_default_config(&["slm", "status", "--json"])).await
+}
 
-        // Start Proxy (depends on bridge being up)
-        let bridge_url = format!("http://127.0.0.1:{}", bridge_port);
-        let proxy_handle = crate::proxy::start_proxy(
-            bridge_url,
-            upstream_url,
-            upstream_api_key,
-            proxy_port,
-            app.clone(),
-        ).await?;
+#[tauri::command]
+pub async fn get_events(limit: usize) -> Result<Vec<Value>, String> {
+    let limit_arg = limit.clamp(1, 500).to_string();
+    let value = qise_cli::run_json(vec![
+        "events".to_string(),
+        "--limit".to_string(),
+        limit_arg,
+        "--json".to_string(),
+    ])
+    .await?;
 
-        let mut s = state.lock().await;
-        s.protection_enabled = true;
-        s.proxy_handle = Some(proxy_handle);
-        s.bridge_handle = Some(bridge_handle);
-        tracing::info!("Protection enabled — proxy on {}, bridge on {}", proxy_port, bridge_port);
+    value
+        .as_array()
+        .cloned()
+        .ok_or_else(|| "Qise events output was not a JSON array.".to_string())
+}
 
-        // Update tray menu text
-        crate::tray::update_tray_menu(&app, true);
-    } else {
-        // --- Disable: stop proxy, then bridge ---
-        let mut s = state.lock().await;
+#[tauri::command]
+pub async fn scan_skill(path: String) -> Result<Value, String> {
+    let mut args = qise_cli::args_with_default_config(&["scan", "skill"]);
+    args.push(path);
+    args.push("--json".to_string());
+    qise_cli::run_json_permissive(args).await
+}
 
-        if let Some(handle) = s.proxy_handle.take() {
-            crate::proxy::stop_proxy(handle).await?;
-        }
+#[tauri::command]
+pub async fn scan_mcp(path: String) -> Result<Value, String> {
+    let mut args = qise_cli::args_with_default_config(&["scan", "mcp"]);
+    args.push(path);
+    args.push("--json".to_string());
+    qise_cli::run_json_permissive(args).await
+}
 
-        if let Some(handle) = s.bridge_handle.take() {
-            crate::bridge::stop_bridge(handle).await?;
-        }
+#[tauri::command]
+pub async fn scan_agent_config(agent: String) -> Result<Value, String> {
+    let mut args = qise_cli::args_with_default_config(&["scan", "agent-config"]);
+    args.push(agent);
+    args.push("--json".to_string());
+    qise_cli::run_json_permissive(args).await
+}
 
-        s.protection_enabled = false;
-        tracing::info!("Protection disabled — proxy + bridge stopped");
-
-        // Update tray menu text
-        crate::tray::update_tray_menu(&app, false);
+#[tauri::command]
+pub async fn scan_agent_assets(
+    agent: String,
+    include_skills: bool,
+    include_mcp: bool,
+    include_agent_config: bool,
+) -> Result<Value, String> {
+    let mut args = qise_cli::args_with_default_config(&["scan", "agent"]);
+    args.push(agent);
+    if !include_skills {
+        args.push("--no-skills".to_string());
     }
+    if !include_mcp {
+        args.push("--no-mcp".to_string());
+    }
+    if !include_agent_config {
+        args.push("--no-agent-config".to_string());
+    }
+    args.push("--json".to_string());
+    qise_cli::run_json_permissive(args).await
+}
 
+#[tauri::command]
+pub async fn scan_all_agents(
+    agents: Vec<String>,
+    include_missing: bool,
+    include_skills: bool,
+    include_mcp: bool,
+    include_agent_config: bool,
+) -> Result<Value, String> {
+    let mut args = qise_cli::args_with_default_config(&["scan", "all"]);
+    if !agents.is_empty() {
+        args.push("--agents".to_string());
+        args.push(agents.join(","));
+    }
+    if include_missing {
+        args.push("--include-missing".to_string());
+    }
+    if !include_skills {
+        args.push("--no-skills".to_string());
+    }
+    if !include_mcp {
+        args.push("--no-mcp".to_string());
+    }
+    if !include_agent_config {
+        args.push("--no-agent-config".to_string());
+    }
+    args.push("--json".to_string());
+    qise_cli::run_json_permissive(args).await
+}
+
+#[tauri::command]
+pub async fn slm_start(
+    model: String,
+    base_url: String,
+    api_key: String,
+    timeout_ms: u32,
+    no_install: bool,
+    no_pull: bool,
+    no_verify: bool,
+) -> Result<CommandText, String> {
+    let mut args = qise_cli::args_with_default_config(&["slm", "start"]);
+    args.extend([
+        "--model".to_string(),
+        model,
+        "--base-url".to_string(),
+        base_url,
+        "--timeout-ms".to_string(),
+        timeout_ms.to_string(),
+    ]);
+    if !api_key.trim().is_empty() {
+        args.extend(["--api-key".to_string(), api_key]);
+    }
+    if no_install {
+        args.push("--no-install".to_string());
+    }
+    if no_pull {
+        args.push("--no-pull".to_string());
+    }
+    if no_verify {
+        args.push("--no-verify".to_string());
+    }
+    Ok(qise_cli::run_permissive(args).await?.into())
+}
+
+#[tauri::command]
+pub async fn slm_stop(keep_server: bool) -> Result<CommandText, String> {
+    let mut args = qise_cli::args_with_default_config(&["slm", "stop"]);
+    if keep_server {
+        args.push("--keep-server".to_string());
+    }
+    Ok(qise_cli::run_permissive(args).await?.into())
+}
+
+#[tauri::command]
+pub async fn run_check(
+    tool_name: String,
+    tool_args: String,
+    pipeline: String,
+    session_id: String,
+) -> Result<Value, String> {
+    let normalized_pipeline = match pipeline.as_str() {
+        "ingress" | "egress" | "output" => pipeline,
+        _ => "egress".to_string(),
+    };
+    let mut args = qise_cli::args_with_default_config(&["check"]);
+    args.push(tool_name);
+    args.push(tool_args);
+    args.extend(["--pipeline".to_string(), normalized_pipeline]);
+    if !session_id.trim().is_empty() {
+        args.extend(["--session-id".to_string(), session_id]);
+    }
+    qise_cli::run_json_permissive(args).await
+}
+
+#[tauri::command]
+pub async fn get_context(tool_name: String, tool_args: String) -> Result<String, String> {
+    let mut args = qise_cli::args_with_default_config(&["context"]);
+    args.push(tool_name);
+    if !tool_args.trim().is_empty() {
+        args.extend(["--tool-args".to_string(), tool_args]);
+    }
+    Ok(qise_cli::run(args).await?.stdout)
+}
+
+#[tauri::command]
+pub async fn get_adapter_snippet(adapter: String) -> Result<String, String> {
+    let adapter = match adapter.as_str() {
+        "nanobot" | "hermes" | "nexau" | "langgraph" | "openai-agents" => adapter,
+        _ => return Err(format!("Unsupported adapter: {}", adapter)),
+    };
+    Ok(qise_cli::run(qise_cli::args(&["adapters", &adapter])).await?.stdout)
+}
+
+#[tauri::command]
+pub async fn stop_qise_services() -> Result<CommandText, String> {
+    Ok(qise_cli::run_permissive(qise_cli::args(&["stop"])).await?.into())
+}
+
+#[tauri::command]
+pub async fn restore_all_agents() -> Result<CommandText, String> {
+    Ok(qise_cli::run_permissive(qise_cli::args(&["restore", "all"])).await?.into())
+}
+
+#[tauri::command]
+pub async fn detect_agents() -> Result<Vec<Value>, String> {
+    let agents = qise_cli::run_json(qise_cli::args(&["agents", "--json"])).await?;
+    agents
+        .get("agents")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .ok_or_else(|| "Qise agents output did not include agents.".to_string())
+}
+
+#[tauri::command]
+pub async fn takeover_agent(agent: String) -> Result<(), String> {
+    let mut args = qise_cli::args_with_default_config(&["protect"]);
+    args.push(agent);
+    qise_cli::run(args).await?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_status(state: State<'_, SharedState>) -> Result<AppStatus, String> {
-    let s = state.lock().await;
-
-    // Try to get SLM status from Bridge health endpoint
-    let (slm_status, slm_latency_ms) = if s.protection_enabled {
-        if let Some(ref _bridge_handle) = s.bridge_handle {
-            let bridge_url = format!("http://127.0.0.1:{}", s.bridge_port);
-            let client = crate::guard_client::GuardClient::new(&bridge_url, 3);
-            if let Ok(data) = client.health_detail().await {
-                let mode = data.get("slm_mode")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unavailable")
-                    .to_string();
-                let lat = data.get("slm_latency_ms")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                (mode, lat)
-            } else {
-                ("unavailable".to_string(), 0)
-            }
-        } else {
-            ("unavailable".to_string(), 0)
-        }
-    } else {
-        ("unavailable".to_string(), 0)
-    };
-
-    Ok(AppStatus {
-        protection_enabled: s.protection_enabled,
-        proxy_port: s.proxy_port,
-        bridge_port: s.bridge_port,
-        blocked_count: s.blocked_count,
-        warning_count: s.warning_count,
-        slm_status,
-        slm_latency_ms,
-    })
+pub async fn protect_agent_with_options(
+    agent: String,
+    base_url: String,
+    experimental: bool,
+) -> Result<CommandText, String> {
+    let mut args = qise_cli::args_with_default_config(&["protect"]);
+    args.push(agent);
+    if !base_url.trim().is_empty() {
+        args.extend(["--base-url".to_string(), base_url]);
+    }
+    if experimental {
+        args.push("--experimental".to_string());
+    }
+    Ok(qise_cli::run_permissive(args).await?.into())
 }
 
 #[tauri::command]
-pub async fn get_events(
-    limit: usize,
-    state: State<'_, SharedState>,
-) -> Result<Vec<SecurityEvent>, String> {
-    let s = state.lock().await;
+pub async fn restore_agent(agent: String) -> Result<(), String> {
+    qise_cli::run(vec!["restore".to_string(), agent]).await?;
+    Ok(())
+}
 
-    // If bridge is running, try to get events from it
-    if s.protection_enabled {
-        if let Some(ref _bridge_handle) = s.bridge_handle {
-            let bridge_url = format!("http://127.0.0.1:{}", s.bridge_port);
-            let client = crate::guard_client::GuardClient::new(&bridge_url, 5);
-            if let Ok(events) = client.get_events(limit).await {
-                return Ok(events
-                    .into_iter()
-                    .filter_map(|v| {
-                        Some(SecurityEvent {
-                            timestamp: v.get("timestamp")?.as_str()?.to_string(),
-                            guard_name: v.get("guard_name")?.as_str()?.to_string(),
-                            verdict: v.get("verdict")?.as_str()?.to_string(),
-                            message: v.get("message").and_then(|m| m.as_str()).unwrap_or("").to_string(),
-                        })
-                    })
-                    .collect());
-            }
-        }
-    }
-
-    Ok(vec![])
+#[tauri::command]
+pub async fn get_takeover_status() -> Result<Value, String> {
+    let status = qise_cli::run_json(qise_cli::args_with_default_config(&["status", "--json"])).await?;
+    Ok(status
+        .get("protected_agents")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({})))
 }
 
 #[tauri::command]
 pub async fn get_guards(state: State<'_, SharedState>) -> Result<Vec<GuardInfo>, String> {
-    let s = state.lock().await;
+    let bridge_port = {
+        let s = state.lock().await;
+        s.bridge_port
+    };
 
-    // If bridge is running, try to get guards from it
-    if s.protection_enabled {
-        if let Some(ref _bridge_handle) = s.bridge_handle {
-            let bridge_url = format!("http://127.0.0.1:{}", s.bridge_port);
-            let client = crate::guard_client::GuardClient::new(&bridge_url, 5);
-            if let Ok(guards) = client.get_guards().await {
-                return Ok(guards
-                    .into_iter()
-                    .filter_map(|v| {
-                        Some(GuardInfo {
-                            name: v.get("name")?.as_str()?.to_string(),
-                            mode: v.get("mode").and_then(|m| m.as_str()).unwrap_or("observe").to_string(),
-                            pipeline: v.get("pipeline").and_then(|p| p.as_str()).unwrap_or("").to_string(),
-                            primary_strategy: v.get("primary_strategy").and_then(|p| p.as_str()).unwrap_or("rules").to_string(),
-                        })
-                    })
-                    .collect());
-            }
+    let bridge_url = format!("http://127.0.0.1:{}", bridge_port);
+    let client = crate::guard_client::GuardClient::new(&bridge_url, 5);
+    if let Ok(guards) = client.get_guards().await {
+        let parsed: Vec<GuardInfo> = guards.into_iter().filter_map(guard_from_value).collect();
+        if !parsed.is_empty() {
+            return Ok(parsed);
         }
     }
 
-    // Fallback: hardcoded guard list (when bridge is not running)
-    Ok(vec![
-        GuardInfo { name: "prompt".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "command".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "filesystem".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "network".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "credential".into(), mode: "enforce".into(), pipeline: "output".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "exfil".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "reasoning".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "tool_sanity".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "context".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "supply_chain".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "resource".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "audit".into(), mode: "observe".into(), pipeline: "output".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "output".into(), mode: "observe".into(), pipeline: "output".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "tool_policy".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-    ])
+    if let Ok(output) = qise_cli::run(qise_cli::args_with_default_config(&["guards"])).await {
+        let parsed = parse_guard_text(&output.stdout);
+        if !parsed.is_empty() {
+            return Ok(parsed);
+        }
+    }
+
+    Ok(default_guards())
 }
 
 #[tauri::command]
@@ -230,220 +315,221 @@ pub async fn set_guard_mode(
     mode: String,
     state: State<'_, SharedState>,
 ) -> Result<(), String> {
-    let s = state.lock().await;
+    let bridge_port = {
+        let s = state.lock().await;
+        s.bridge_port
+    };
 
-    // If bridge is running, forward mode change
-    if s.protection_enabled {
-        if let Some(ref _bridge_handle) = s.bridge_handle {
-            let bridge_url = format!("http://127.0.0.1:{}", s.bridge_port);
-            let client = crate::guard_client::GuardClient::new(&bridge_url, 5);
-            return client.set_guard_mode(&guard_name, &mode).await;
-        }
+    let bridge_url = format!("http://127.0.0.1:{}", bridge_port);
+    let client = crate::guard_client::GuardClient::new(&bridge_url, 5);
+    client.set_guard_mode(&guard_name, &mode).await.map_err(|e| {
+        format!(
+            "Guard mode can only be changed while the Qise bridge is running. Bridge error: {}",
+            e
+        )
+    })
+}
+
+#[tauri::command]
+pub async fn toggle_protection(
+    enable: bool,
+    state: State<'_, SharedState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    if enable {
+        return Err(
+            "Desktop no longer starts an embedded proxy without an upstream. Use Protect on an installed Agent; Qise will start managed services when protection succeeds."
+                .to_string(),
+        );
     }
 
-    tracing::info!("Setting guard '{}' to mode '{}' (bridge not running, no-op)", guard_name, mode);
+    let (proxy_handle, bridge_handle) = {
+        let mut s = state.lock().await;
+        s.protection_enabled = false;
+        (s.proxy_handle.take(), s.bridge_handle.take())
+    };
+
+    if let Some(handle) = proxy_handle {
+        crate::proxy::stop_proxy(handle).await?;
+    }
+    if let Some(handle) = bridge_handle {
+        crate::bridge::stop_bridge(handle).await?;
+    }
+
+    qise_cli::run(qise_cli::args(&["stop"])).await?;
+    qise_cli::run(qise_cli::args(&["restore", "all"])).await?;
+    crate::tray::update_tray_menu(&app, false);
     Ok(())
 }
 
-/// Get the user's home directory.
-fn dirs_home() -> Result<String, String> {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "Cannot determine home directory".into())
-}
-
-// ---------------------------------------------------------------------------
-// Takeover Commands
-// ---------------------------------------------------------------------------
-
-#[derive(Serialize)]
-pub struct AgentInfoResponse {
-    pub agent_type: String,
-    pub display_name: String,
-    pub installed: bool,
-    pub taken_over: bool,
-}
-
 #[tauri::command]
-pub async fn detect_agents(state: State<'_, SharedState>) -> Result<Vec<AgentInfoResponse>, String> {
+pub async fn get_config_path(state: State<'_, SharedState>) -> Result<String, String> {
     let s = state.lock().await;
-    let agents = s.takeover_manager.detect_agents();
-    Ok(agents
-        .into_iter()
-        .map(|a| AgentInfoResponse {
-            agent_type: a.agent_type,
-            display_name: a.display_name,
-            installed: a.installed,
-            taken_over: a.taken_over,
-        })
-        .collect())
-}
-
-#[tauri::command]
-pub async fn takeover_agent(
-    agent: String,
-    state: State<'_, SharedState>,
-) -> Result<(), String> {
-    let mut s = state.lock().await;
-    let agent_type = parse_agent_type_str(&agent)?;
-    s.takeover_manager.takeover(&agent_type)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn restore_agent(
-    agent: String,
-    state: State<'_, SharedState>,
-) -> Result<(), String> {
-    let mut s = state.lock().await;
-    let agent_type = parse_agent_type_str(&agent)?;
-    s.takeover_manager.restore(&agent_type)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn get_takeover_status(
-    state: State<'_, SharedState>,
-) -> Result<Vec<crate::takeover::TakeoverState>, String> {
-    let s = state.lock().await;
-    Ok(s.takeover_manager.get_takeover_status())
-}
-
-/// Parse agent type string.
-fn parse_agent_type_str(s: &str) -> Result<crate::takeover::AgentType, String> {
-    match s {
-        "GenericOpenAI" | "generic_openai" => Ok(crate::takeover::AgentType::GenericOpenAI),
-        "ClaudeCode" | "claude_code" => Ok(crate::takeover::AgentType::ClaudeCode),
-        _ => Err(format!("Unknown agent type: {}", s)),
+    if s.config_path.is_empty() {
+        default_config_path()
+    } else {
+        Ok(s.config_path.clone())
     }
 }
 
-// ---------------------------------------------------------------------------
-// Config Commands
-// ---------------------------------------------------------------------------
-
 #[tauri::command]
-pub async fn get_config(state: State<'_, SharedState>) -> Result<serde_json::Value, String> {
+pub async fn get_config(state: State<'_, SharedState>) -> Result<Value, String> {
     let s = state.lock().await;
     let config_path = if s.config_path.is_empty() {
-        let home = dirs_home()?;
-        format!("{}/.qise/shield.yaml", home)
+        default_config_path()?
     } else {
         s.config_path.clone()
     };
 
-    // Try to read shield.yaml
     match std::fs::read_to_string(&config_path) {
-        Ok(content) => {
-            match serde_yaml::from_str::<serde_json::Value>(&content) {
-                Ok(val) => Ok(val),
-                Err(e) => Err(format!("Failed to parse shield.yaml: {}", e)),
-            }
-        }
-        Err(_) => {
-            // File doesn't exist — return default config
-            Ok(serde_json::json!({
-                "version": "1.0",
-                "integration": {
-                    "mode": "proxy",
-                    "proxy": {
-                        "port": 8822,
-                        "target_agents": ["claude_code"],
-                        "auto_takeover": true,
-                        "crash_recovery": true,
-                    }
-                },
-                "models": {
-                    "slm": {
-                        "base_url": "http://localhost:11434/v1",
-                        "model": "qwen3:4b",
-                        "timeout_ms": 5000,
-                    },
-                    "llm": {
-                        "base_url": "",
-                        "model": "",
-                        "timeout_ms": 5000,
-                    },
-                },
-                "guards": {
-                    "enabled": [
-                        "prompt", "command", "credential", "reasoning",
-                        "filesystem", "network", "exfil", "resource", "audit",
-                        "tool_sanity", "context", "output", "tool_policy", "supply_chain",
-                    ],
-                    "config": {},
-                },
-            }))
-        }
+        Ok(content) => serde_yaml::from_str::<Value>(&content)
+            .map_err(|e| format!("Failed to parse shield.yaml: {}", e)),
+        Err(_) => Ok(default_config()),
     }
 }
 
 #[tauri::command]
-pub async fn save_config(
-    config: serde_json::Value,
-    state: State<'_, SharedState>,
-) -> Result<(), String> {
+pub async fn save_config(config: Value, state: State<'_, SharedState>) -> Result<(), String> {
     let s = state.lock().await;
     let config_path = if s.config_path.is_empty() {
-        let home = dirs_home()?;
-        let dir = format!("{}/.qise", home);
-        let _ = std::fs::create_dir_all(&dir);
-        format!("{}/shield.yaml", dir)
+        default_config_path()?
     } else {
         s.config_path.clone()
     };
     drop(s);
 
-    // Convert JSON to YAML and write
+    if let Some(parent) = std::path::Path::new(&config_path).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+
     let yaml_str = serde_yaml::to_string(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    // Atomic write: write to temp file then rename
     let temp_path = format!("{}.tmp", config_path);
     std::fs::write(&temp_path, &yaml_str)
         .map_err(|e| format!("Failed to write config: {}", e))?;
-    std::fs::rename(&temp_path, &config_path)
-        .map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
-            format!("Failed to rename config file: {}", e)
-        })?;
+    std::fs::rename(&temp_path, &config_path).map_err(|e| {
+        let _ = std::fs::remove_file(&temp_path);
+        format!("Failed to rename config file: {}", e)
+    })?;
 
     tracing::info!("Config saved to {}", config_path);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_default_config() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
+pub async fn get_default_config() -> Result<Value, String> {
+    Ok(default_config())
+}
+
+fn guard_from_value(value: Value) -> Option<GuardInfo> {
+    Some(GuardInfo {
+        name: value.get("name")?.as_str()?.to_string(),
+        mode: value
+            .get("mode")
+            .and_then(|item| item.as_str())
+            .unwrap_or("observe")
+            .to_string(),
+        pipeline: value
+            .get("pipeline")
+            .and_then(|item| item.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        primary_strategy: value
+            .get("primary_strategy")
+            .and_then(|item| item.as_str())
+            .unwrap_or("rules")
+            .to_string(),
+    })
+}
+
+fn parse_guard_text(text: &str) -> Vec<GuardInfo> {
+    text.lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty()
+                || trimmed.starts_with("Name")
+                || trimmed.starts_with("---")
+                || trimmed.starts_with("Total:")
+            {
+                return None;
+            }
+
+            let cols: Vec<&str> = trimmed.split_whitespace().collect();
+            if cols.len() < 4 {
+                return None;
+            }
+
+            Some(GuardInfo {
+                name: cols[0].to_string(),
+                pipeline: cols[1].to_string(),
+                primary_strategy: cols[2].to_string(),
+                mode: cols[3].to_string(),
+            })
+        })
+        .collect()
+}
+
+fn default_config_path() -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "Cannot determine home directory".to_string())?;
+    Ok(format!("{}/.qise/shield.yaml", home))
+}
+
+fn default_config() -> Value {
+    serde_json::json!({
         "version": "1.0",
         "integration": {
             "mode": "proxy",
             "proxy": {
                 "port": 8822,
-                "target_agents": ["claude_code"],
+                "target_agents": ["codex", "openclaw"],
                 "auto_takeover": true,
                 "crash_recovery": true,
+                "upstream_url": "",
+                "upstream_api_key": ""
             }
         },
         "models": {
             "slm": {
                 "base_url": "http://localhost:11434/v1",
                 "model": "qwen3:4b",
-                "timeout_ms": 5000,
+                "timeout_ms": 5000
             },
             "llm": {
                 "base_url": "",
                 "model": "",
-                "timeout_ms": 5000,
-            },
+                "timeout_ms": 5000
+            }
         },
         "guards": {
             "enabled": [
                 "prompt", "command", "credential", "reasoning",
                 "filesystem", "network", "exfil", "resource", "audit",
-                "tool_sanity", "context", "output", "tool_policy", "supply_chain",
+                "tool_sanity", "context", "output", "tool_policy", "supply_chain"
             ],
-            "config": {},
-        },
-    }))
+            "config": {}
+        }
+    })
+}
+
+fn default_guards() -> Vec<GuardInfo> {
+    vec![
+        GuardInfo { name: "prompt".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
+        GuardInfo { name: "tool_sanity".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
+        GuardInfo { name: "context".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
+        GuardInfo { name: "supply_chain".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
+        GuardInfo { name: "command".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "reasoning".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "ai".into() },
+        GuardInfo { name: "filesystem".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "network".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "exfil".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "ai".into() },
+        GuardInfo { name: "resource".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "tool_policy".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "credential".into(), mode: "enforce".into(), pipeline: "output".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "audit".into(), mode: "observe".into(), pipeline: "output".into(), primary_strategy: "rules".into() },
+        GuardInfo { name: "output".into(), mode: "observe".into(), pipeline: "output".into(), primary_strategy: "ai".into() },
+    ]
 }

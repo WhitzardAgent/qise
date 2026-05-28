@@ -1,6 +1,6 @@
 [package]
 name = "qise-app"
-version = "0.1.0"
+version = "0.2.0"
 description = "Qise — AI Agent Security Framework"
 authors = ["Qise Team"]
 edition = "2021"
@@ -29,3 +29,4 @@ tower-http = { version = "0.6", features = ["cors"] }
 bytes = "1"
 futures = "0.3"
 tokio-stream = "0.1"
+libc = "0.2"

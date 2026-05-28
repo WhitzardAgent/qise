@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { SecurityEvent } from "../lib/api";
+import { makeRealtimeEvent } from "../lib/api";
+import type { EventEvidence, SecurityEvent } from "../lib/api";
 
 interface EventLogProps {
   events: SecurityEvent[];
@@ -22,38 +23,36 @@ function verdictBadgeClass(verdict: string): string {
   }
 }
 
+function eventVerdict(event: SecurityEvent): string {
+  return event.decision.verdict || "pass";
+}
+
+function evidenceText(evidence: EventEvidence): string {
+  return evidence.message || evidence.snippet || evidence.rule_id || evidence.type;
+}
+
+function eventMessage(event: SecurityEvent): string {
+  const firstEvidence = event.evidence.find((item) => item.message || item.snippet);
+  return (
+    firstEvidence?.message ||
+    firstEvidence?.snippet ||
+    event.recommendation ||
+    event.action.resource ||
+    event.risk.category
+  );
+}
+
+function eventGuardName(event: SecurityEvent): string {
+  return event.evidence.find((item) => item.guard)?.guard || event.action.name || event.risk.category || event.source;
+}
+
 export default function EventLog({ events, onEvent }: EventLogProps) {
   const [filter, setFilter] = useState<EventFilter>("all");
 
   // Listen for real-time guard events from Tauri backend
   useEffect(() => {
     const unlisten = listen<Record<string, unknown>>("guard-event", (event) => {
-      const payload = event.payload;
-      // Extract guard results from the payload
-      const guardResults = (payload.guard_results || []) as Array<{
-        guard: string;
-        verdict: string;
-        message: string;
-      }>;
-
-      for (const gr of guardResults) {
-        onEvent({
-          timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
-          guard_name: gr.guard,
-          verdict: gr.verdict,
-          message: gr.message,
-        });
-      }
-
-      // If the overall action is block/warn with no individual results
-      if (guardResults.length === 0 && (payload.action === "block" || payload.action === "warn")) {
-        onEvent({
-          timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
-          guard_name: "proxy",
-          verdict: String(payload.action),
-          message: String(payload.block_reason || (Array.isArray(payload.warnings) ? payload.warnings.join("; ") : "") || ""),
-        });
-      }
+      makeRealtimeEvent(event.payload).forEach(onEvent);
     });
 
     return () => {
@@ -62,8 +61,9 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
   }, [onEvent]);
 
   const filteredEvents = events.filter((e) => {
-    if (filter === "blocked") return e.verdict.toLowerCase() === "block";
-    if (filter === "warnings") return e.verdict.toLowerCase() === "warn";
+    const verdict = eventVerdict(e).toLowerCase();
+    if (filter === "blocked") return verdict === "block";
+    if (filter === "warnings") return verdict === "warn";
     return true;
   });
 
@@ -93,8 +93,8 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
             {f === "all" && ` (${events.length})`}
-            {f === "blocked" && ` (${events.filter((e) => e.verdict.toLowerCase() === "block").length})`}
-            {f === "warnings" && ` (${events.filter((e) => e.verdict.toLowerCase() === "warn").length})`}
+            {f === "blocked" && ` (${events.filter((e) => eventVerdict(e).toLowerCase() === "block").length})`}
+            {f === "warnings" && ` (${events.filter((e) => eventVerdict(e).toLowerCase() === "warn").length})`}
           </button>
         ))}
       </div>
@@ -109,22 +109,22 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
             <div
               key={i}
               className={`flex items-center gap-3 py-2 px-3 rounded-lg animate-fade-in ${
-                event.verdict.toLowerCase() === "block"
+                eventVerdict(event).toLowerCase() === "block"
                   ? "border-l-2 border-[#FF6363]"
                   : ""
               }`}
             >
               <span className="text-xs font-mono text-[#6a6b6c]">
-                {event.timestamp}
+                {event.timestamp.replace("T", " ").slice(0, 19)}
               </span>
               <span className="text-xs font-mono text-[#9c9c9d]">
-                {event.guard_name}
+                {eventGuardName(event)}
               </span>
-              <span className={verdictBadgeClass(event.verdict)}>
-                {event.verdict}
+              <span className={verdictBadgeClass(eventVerdict(event))}>
+                {eventVerdict(event)}
               </span>
               <span className="text-sm text-[#cecece] truncate">
-                {event.message}
+                {event.evidence.length > 0 ? evidenceText(event.evidence[0]) : eventMessage(event)}
               </span>
             </div>
           ))

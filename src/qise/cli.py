@@ -89,6 +89,15 @@ def _build_parser() -> argparse.ArgumentParser:
     status_parser = subparsers.add_parser("status", help="Show Qise protection status")
     status_parser.add_argument("--json", action="store_true", help="Output JSON")
 
+    # qise agents
+    agents_parser = subparsers.add_parser("agents", help="Detect installed Agents available to Qise")
+    agents_parser.add_argument("--json", action="store_true", help="Output JSON")
+    agents_parser.add_argument(
+        "--include-missing",
+        action="store_true",
+        help="Also show supported Agents that were not detected",
+    )
+
     # qise events
     events_parser = subparsers.add_parser("events", help="Show Qise security events")
     events_parser.add_argument("--limit", type=int, default=50, help="Maximum events to show")
@@ -147,7 +156,26 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # qise scan
     scan_parser = subparsers.add_parser("scan", help="Preflight scan Agent assets")
+    scan_parser.add_argument("--json", action="store_true", help="Output JSON")
+    scan_parser.add_argument("--agents", default="", help="Comma-separated Agent names for automatic scan")
+    scan_parser.add_argument("--include-missing", action="store_true", help="Also scan known Agents that are not installed")
+    scan_parser.add_argument("--no-skills", action="store_true", help="Skip Agent files/skills during automatic scan")
+    scan_parser.add_argument("--no-mcp", action="store_true", help="Skip MCP config candidates during automatic scan")
+    scan_parser.add_argument("--no-agent-config", action="store_true", help="Skip Agent config checks during automatic scan")
     scan_subparsers = scan_parser.add_subparsers(dest="scan_command")
+    scan_all = scan_subparsers.add_parser("all", help="Automatically scan all detected Agents")
+    scan_all.add_argument("--json", action="store_true", help="Output JSON")
+    scan_all.add_argument("--agents", default="", help="Comma-separated Agent names to scan")
+    scan_all.add_argument("--include-missing", action="store_true", help="Also scan known Agents that are not installed")
+    scan_all.add_argument("--no-skills", action="store_true", help="Skip Agent files/skills")
+    scan_all.add_argument("--no-mcp", action="store_true", help="Skip MCP config candidates")
+    scan_all.add_argument("--no-agent-config", action="store_true", help="Skip Agent config checks")
+    scan_agent = scan_subparsers.add_parser("agent", help="Automatically scan one detected Agent")
+    scan_agent.add_argument("agent", help="Agent name: codex, openclaw, claude-code")
+    scan_agent.add_argument("--json", action="store_true", help="Output JSON")
+    scan_agent.add_argument("--no-skills", action="store_true", help="Skip Agent files/skills")
+    scan_agent.add_argument("--no-mcp", action="store_true", help="Skip MCP config candidates")
+    scan_agent.add_argument("--no-agent-config", action="store_true", help="Skip Agent config checks")
     scan_mcp = scan_subparsers.add_parser("mcp", help="Scan an MCP config file")
     scan_mcp.add_argument("path", help="Path to MCP JSON/YAML config")
     scan_mcp.add_argument("--json", action="store_true", help="Output JSON")
@@ -471,12 +499,16 @@ def _cmd_events(args: argparse.Namespace) -> int:
 def _cmd_protect(args: argparse.Namespace) -> int:
     from qise.product.agents import protect_agent
 
-    code, message = protect_agent(
-        args.agent,
-        base_url=args.base_url,
-        experimental=args.experimental,
-        config_path=args.config,
-    )
+    try:
+        code, message = protect_agent(
+            args.agent,
+            base_url=args.base_url,
+            experimental=args.experimental,
+            config_path=args.config,
+        )
+    except Exception as exc:
+        print(f"Error: {exc}")
+        return 1
     print(message)
     return code
 
@@ -580,13 +612,51 @@ def _cmd_slm(args: argparse.Namespace) -> int:
 def _cmd_scan(args: argparse.Namespace) -> int:
     from pathlib import Path
 
-    from qise.product.scan import record_scan_event, render_report, scan_agent_config, scan_mcp, scan_skill
+    from qise.product.scan import (
+        iter_scan_reports,
+        record_scan_event,
+        render_collection,
+        render_report,
+        scan_agent_assets,
+        scan_agent_config,
+        scan_all_agent_assets,
+        scan_mcp,
+        scan_skill,
+    )
 
-    if not args.scan_command:
-        print("Error: specify scan target: qise scan mcp <path> or qise scan skill <path>", file=sys.stderr)
+    def _selected_agents() -> list[str] | None:
+        raw = getattr(args, "agents", "") or ""
+        values = [item.strip() for item in raw.split(",") if item.strip()]
+        return values or None
+
+    def _scan_options() -> dict[str, bool]:
+        return {
+            "include_skills": not getattr(args, "no_skills", False),
+            "include_mcp": not getattr(args, "no_mcp", False),
+            "include_agent_config": not getattr(args, "no_agent_config", False),
+        }
+
+    if not any(_scan_options().values()) and args.scan_command in {None, "all", "agent"}:
+        print("Error: at least one automatic scan category must be enabled.", file=sys.stderr)
         return 1
 
     try:
+        if args.scan_command in {None, "all"}:
+            collection = scan_all_agent_assets(
+                agents=_selected_agents(),
+                include_missing=getattr(args, "include_missing", False),
+                **_scan_options(),
+            )
+            for report in iter_scan_reports(collection):
+                record_scan_event(report)
+            print(render_collection(collection, json_output=args.json))
+            return 1 if collection.verdict == "block" else 0
+        if args.scan_command == "agent":
+            collection = scan_agent_assets(args.agent, **_scan_options())
+            for report in iter_scan_reports(collection):
+                record_scan_event(report)
+            print(render_collection(collection, json_output=args.json))
+            return 1 if collection.verdict == "block" else 0
         if args.scan_command == "mcp":
             report = scan_mcp(Path(args.path))
         elif args.scan_command == "skill":
@@ -605,6 +675,14 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Error: scan failed: {exc}", file=sys.stderr)
         return 1
+
+
+def _cmd_agents(args: argparse.Namespace) -> int:
+    from qise.product.agents import detect_agents, render_agents
+
+    agents = detect_agents(include_missing=args.include_missing)
+    print(render_agents(agents, json_output=args.json))
+    return 0
 
 
 def _cmd_bridge(args: argparse.Namespace) -> int:
@@ -963,6 +1041,7 @@ def main() -> None:
         "guards": _cmd_guards,
         "doctor": _cmd_doctor,
         "status": _cmd_status,
+        "agents": _cmd_agents,
         "events": _cmd_events,
         "protect": _cmd_protect,
         "restore": _cmd_restore,

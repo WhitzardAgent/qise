@@ -8,8 +8,8 @@ mod decision;
 mod guard_client;
 mod parser;
 mod proxy;
+mod qise_cli;
 mod streaming;
-mod takeover;
 mod tray;
 
 use std::sync::Arc;
@@ -38,8 +38,6 @@ pub struct AppState {
     pub upstream_api_key: String,
     /// Path to shield.yaml configuration file.
     pub config_path: String,
-    /// Takeover manager for agent config redirection.
-    pub takeover_manager: takeover::TakeoverManager,
 }
 
 impl Default for AppState {
@@ -55,7 +53,6 @@ impl Default for AppState {
             upstream_url: String::new(),
             upstream_api_key: String::new(),
             config_path: String::new(),
-            takeover_manager: takeover::TakeoverManager::new(8822),
         }
     }
 }
@@ -75,12 +72,6 @@ pub fn run() {
             let window = app.get_webview_window("main").expect("main window not found");
             let state: SharedState = app.state::<SharedState>().inner().clone();
 
-            // Recover any takeovers from previous crash
-            {
-                let mut s = state.blocking_lock();
-                s.takeover_manager.recover_on_startup();
-            }
-
             window.on_window_event(move |event| {
                 if let tauri::WindowEvent::Destroyed = event {
                     tracing::info!("Window destroyed — cleaning up proxy + bridge");
@@ -96,13 +87,29 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::toggle_protection,
             commands::get_status,
+            commands::get_doctor,
+            commands::get_slm_status,
             commands::get_events,
+            commands::scan_skill,
+            commands::scan_mcp,
+            commands::scan_agent_config,
+            commands::scan_agent_assets,
+            commands::scan_all_agents,
+            commands::slm_start,
+            commands::slm_stop,
+            commands::run_check,
+            commands::get_context,
+            commands::get_adapter_snippet,
+            commands::stop_qise_services,
+            commands::restore_all_agents,
             commands::get_guards,
             commands::set_guard_mode,
             commands::detect_agents,
             commands::takeover_agent,
+            commands::protect_agent_with_options,
             commands::restore_agent,
             commands::get_takeover_status,
+            commands::get_config_path,
             commands::get_config,
             commands::save_config,
             commands::get_default_config,
@@ -112,25 +119,48 @@ pub fn run() {
 }
 
 /// Stop proxy and bridge, restoring clean state.
-async fn cleanup_services(state: &SharedState) {
-    let mut s = state.lock().await;
+pub(crate) async fn cleanup_services(state: &SharedState) {
+    let (proxy_handle, bridge_handle) = {
+        let mut s = state.lock().await;
+        s.protection_enabled = false;
+        (s.proxy_handle.take(), s.bridge_handle.take())
+    };
 
-    if let Some(handle) = s.proxy_handle.take() {
+    if let Some(handle) = proxy_handle {
         match proxy::stop_proxy(handle).await {
             Ok(()) => tracing::info!("Proxy stopped on cleanup"),
             Err(e) => tracing::error!("Failed to stop proxy on cleanup: {}", e),
         }
     }
 
-    if let Some(handle) = s.bridge_handle.take() {
+    if let Some(handle) = bridge_handle {
         match bridge::stop_bridge(handle).await {
             Ok(()) => tracing::info!("Bridge stopped on cleanup"),
             Err(e) => tracing::error!("Failed to stop bridge on cleanup: {}", e),
         }
     }
 
-    // Restore all active takeovers
-    s.takeover_manager.restore_all();
+    match qise_cli::run(qise_cli::args(&["stop"])).await {
+        Ok(output) => {
+            if !output.stdout.is_empty() {
+                tracing::info!("Qise stop on cleanup: {}", output.stdout);
+            }
+            if !output.stderr.is_empty() {
+                tracing::warn!("Qise stop stderr on cleanup: {}", output.stderr);
+            }
+        }
+        Err(e) => tracing::error!("Failed to stop Qise managed services on cleanup: {}", e),
+    }
 
-    s.protection_enabled = false;
+    match qise_cli::run(qise_cli::args(&["restore", "all"])).await {
+        Ok(output) => {
+            if !output.stdout.is_empty() {
+                tracing::info!("Qise restore on cleanup: {}", output.stdout);
+            }
+            if !output.stderr.is_empty() {
+                tracing::warn!("Qise restore stderr on cleanup: {}", output.stderr);
+            }
+        }
+        Err(e) => tracing::error!("Failed to restore Qise protection on cleanup: {}", e),
+    }
 }

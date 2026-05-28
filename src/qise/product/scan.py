@@ -66,6 +66,44 @@ _SUSPICIOUS_DOMAINS = re.compile(
     re.IGNORECASE,
 )
 _INTEGRITY_ALGORITHM_RE = re.compile(r"\bsha(?:256|384|512)-$", re.IGNORECASE)
+_SKIP_SCAN_DIRS = {
+    ".git",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    "venv",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    "cache",
+    "caches",
+    "logs",
+}
+_TEXT_SUFFIXES = {
+    "",
+    ".bash",
+    ".cjs",
+    ".conf",
+    ".json",
+    ".js",
+    ".jsx",
+    ".md",
+    ".mjs",
+    ".py",
+    ".sh",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".zsh",
+}
+_STRUCTURED_SUFFIXES = {".json", ".yaml", ".yml"}
+_MCP_CONTENT_RE = re.compile(r"\b(?:mcpServers|mcp_servers|mcp-servers)\b", re.IGNORECASE)
+_MAX_AUTO_FILES_PER_ROOT = 800
 
 
 @dataclass
@@ -87,6 +125,23 @@ class ScanReport:
     target_type: str
     verdict: str
     findings: list[Finding]
+    recommendation: str
+
+
+@dataclass
+class ScanSkip:
+    agent: str
+    target_type: str
+    reason: str
+
+
+@dataclass
+class ScanCollection:
+    target: str
+    target_type: str
+    verdict: str
+    reports: list[ScanReport]
+    skipped: list[ScanSkip]
     recommendation: str
 
 
@@ -251,6 +306,47 @@ def _scan_shell_joining(value: str, *, path: str) -> list[Finding]:
     return findings
 
 
+def _is_skipped_dir(path: Path) -> bool:
+    return any(part.lower() in _SKIP_SCAN_DIRS for part in path.parts)
+
+
+def _iter_scannable_files(path: Path, *, max_files: int = _MAX_AUTO_FILES_PER_ROOT) -> list[Path]:
+    if path.is_file():
+        return [path]
+
+    files: list[Path] = []
+    for candidate in path.rglob("*"):
+        if len(files) >= max_files:
+            break
+        if not candidate.is_file() or _is_skipped_dir(candidate):
+            continue
+        if candidate.suffix.lower() not in _TEXT_SUFFIXES:
+            continue
+        try:
+            if candidate.stat().st_size > 512_000:
+                continue
+        except OSError:
+            continue
+        files.append(candidate)
+    return files
+
+
+def _scan_files(path: Path, *, target_type: str) -> ScanReport:
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    findings: list[Finding] = []
+    for file_path in _iter_scannable_files(path):
+        try:
+            text = file_path.read_text(errors="ignore")
+        except Exception:
+            continue
+        rel = str(file_path.relative_to(path)) if path.is_dir() else str(file_path)
+        findings.extend(_scan_text(text, path=rel, target_type=target_type))
+
+    return _finalize_report(path, target_type, findings)
+
+
 def scan_mcp(path: Path) -> ScanReport:
     if not path.exists():
         raise FileNotFoundError(path)
@@ -281,25 +377,11 @@ def scan_mcp(path: Path) -> ScanReport:
 
 
 def scan_skill(path: Path) -> ScanReport:
-    if not path.exists():
-        raise FileNotFoundError(path)
+    return _scan_files(path, target_type="skill")
 
-    findings: list[Finding] = []
-    files = [path] if path.is_file() else [
-        p for p in path.rglob("*")
-        if p.is_file() and "node_modules" not in p.parts and ".git" not in p.parts
-    ]
-    for file_path in files:
-        try:
-            if file_path.stat().st_size > 512_000:
-                continue
-            text = file_path.read_text(errors="ignore")
-        except Exception:
-            continue
-        rel = str(file_path.relative_to(path)) if path.is_dir() else str(file_path)
-        findings.extend(_scan_text(text, path=rel, target_type="skill"))
 
-    return _finalize_report(path, "skill", findings)
+def scan_agent_files(path: Path) -> ScanReport:
+    return _scan_files(path, target_type="agent_files")
 
 
 def scan_agent_config(agent: str) -> ScanReport:
@@ -397,6 +479,195 @@ def scan_agent_config(agent: str) -> ScanReport:
     return _finalize_report(config_path, "agent_config", findings)
 
 
+def _agent_roots(agent_key: str) -> list[Path]:
+    from qise.product.agents import AGENTS, AgentConfigManager, _expand_agent_path
+
+    spec = AGENTS.get(agent_key)
+    if spec is None:
+        return []
+
+    roots: set[Path] = set()
+    manager = AgentConfigManager(spec)
+    config_path = manager.locate_config(create=False)
+    if config_path is not None:
+        roots.add(config_path.parent)
+
+    for raw in spec.config_paths:
+        candidate = _expand_agent_path(raw).parent
+        if candidate.exists():
+            roots.add(candidate)
+
+    return sorted(roots)
+
+
+def _looks_like_mcp_file(path: Path) -> bool:
+    if path.suffix.lower() not in _STRUCTURED_SUFFIXES:
+        return False
+    lower_name = path.name.lower()
+    if "mcp" in lower_name:
+        return True
+    try:
+        if path.stat().st_size > 256_000:
+            return False
+        return _MCP_CONTENT_RE.search(path.read_text(errors="ignore")) is not None
+    except OSError:
+        return False
+
+
+def _mcp_candidates(roots: list[Path]) -> list[Path]:
+    candidates: set[Path] = set()
+    for root in roots:
+        for file_path in _iter_scannable_files(root):
+            if _looks_like_mcp_file(file_path):
+                candidates.add(file_path)
+    return sorted(candidates)
+
+
+def _parse_error_report(path: Path, target_type: str, exc: Exception) -> ScanReport:
+    return _finalize_report(path, target_type, [
+        _finding(
+            verdict="warn",
+            category=target_type,
+            severity="medium",
+            confidence=0.72,
+            message=f"Could not parse {target_type}: {exc}",
+            path=str(path),
+            snippet="",
+            rule_id=f"{target_type}.parse_error",
+        )
+    ])
+
+
+def _collection_verdict(reports: list[ScanReport]) -> str:
+    if any(report.verdict == "block" for report in reports):
+        return "block"
+    if any(report.verdict == "warn" for report in reports):
+        return "warn"
+    return "pass"
+
+
+def _collection_recommendation(reports: list[ScanReport], skipped: list[ScanSkip]) -> str:
+    verdict = _collection_verdict(reports)
+    if not reports:
+        return "No installed Agent assets were found to scan."
+    if verdict == "block":
+        return "Do not trust the flagged Agent assets until blocking findings are removed."
+    if verdict == "warn":
+        return "Review warning findings before relying on these Agent assets."
+    if skipped:
+        return "No obvious risks found in scanned assets; some asset categories were not found."
+    return "No obvious preflight risks found across scanned Agent assets."
+
+
+def scan_agent_assets(
+    agent: str,
+    *,
+    include_skills: bool = True,
+    include_mcp: bool = True,
+    include_agent_config: bool = True,
+) -> ScanCollection:
+    from qise.product.agents import AGENTS, normalize_agent_key
+
+    key = normalize_agent_key(agent)
+    spec = AGENTS.get(key)
+    reports: list[ScanReport] = []
+    skipped: list[ScanSkip] = []
+
+    if spec is None:
+        reports.append(scan_agent_config(agent))
+        return ScanCollection(
+            target=key,
+            target_type="agent",
+            verdict=_collection_verdict(reports),
+            reports=reports,
+            skipped=skipped,
+            recommendation=_collection_recommendation(reports, skipped),
+        )
+
+    roots = _agent_roots(key)
+    if include_agent_config:
+        reports.append(scan_agent_config(key))
+
+    if include_skills:
+        if roots:
+            for root in roots:
+                reports.append(scan_agent_files(root))
+        else:
+            skipped.append(ScanSkip(agent=key, target_type="agent_files", reason="No Agent config directory was found."))
+
+    if include_mcp:
+        candidates = _mcp_candidates(roots)
+        if candidates:
+            for candidate in candidates:
+                try:
+                    reports.append(scan_mcp(candidate))
+                except Exception as exc:
+                    reports.append(_parse_error_report(candidate, "mcp_config", exc))
+        else:
+            skipped.append(ScanSkip(agent=key, target_type="mcp_config", reason="No MCP config candidates were found."))
+
+    return ScanCollection(
+        target=key,
+        target_type="agent",
+        verdict=_collection_verdict(reports),
+        reports=reports,
+        skipped=skipped,
+        recommendation=_collection_recommendation(reports, skipped),
+    )
+
+
+def scan_all_agent_assets(
+    *,
+    agents: list[str] | None = None,
+    include_missing: bool = False,
+    include_skills: bool = True,
+    include_mcp: bool = True,
+    include_agent_config: bool = True,
+) -> ScanCollection:
+    from qise.product.agents import detect_agents, normalize_agent_key
+
+    detected = detect_agents(include_missing=include_missing)
+    if agents:
+        keys = [normalize_agent_key(agent) for agent in agents]
+    else:
+        keys = [
+            str(row["key"])
+            for row in detected
+            if include_missing or row.get("installed") or row.get("protected")
+        ]
+
+    reports: list[ScanReport] = []
+    skipped: list[ScanSkip] = []
+    for key in keys:
+        collection = scan_agent_assets(
+            key,
+            include_skills=include_skills,
+            include_mcp=include_mcp,
+            include_agent_config=include_agent_config,
+        )
+        reports.extend(collection.reports)
+        skipped.extend(collection.skipped)
+
+    if not keys:
+        skipped.append(ScanSkip(agent="all", target_type="agent", reason="No installed Agents were detected."))
+
+    return ScanCollection(
+        target="all",
+        target_type="all_agents",
+        verdict=_collection_verdict(reports),
+        reports=reports,
+        skipped=skipped,
+        recommendation=_collection_recommendation(reports, skipped),
+    )
+
+
+def iter_scan_reports(report: ScanReport | ScanCollection):
+    if isinstance(report, ScanCollection):
+        yield from report.reports
+    else:
+        yield report
+
+
 def _worst_finding(findings: list[Finding]) -> Finding | None:
     if not findings:
         return None
@@ -468,6 +739,24 @@ def report_to_dict(report: ScanReport) -> dict[str, Any]:
     }
 
 
+def collection_to_dict(collection: ScanCollection) -> dict[str, Any]:
+    return {
+        "target": collection.target,
+        "target_type": collection.target_type,
+        "verdict": collection.verdict,
+        "reports": [report_to_dict(report) for report in collection.reports],
+        "skipped": [skip.__dict__ for skip in collection.skipped],
+        "recommendation": collection.recommendation,
+        "summary": {
+            "reports": len(collection.reports),
+            "block": sum(1 for report in collection.reports if report.verdict == "block"),
+            "warn": sum(1 for report in collection.reports if report.verdict == "warn"),
+            "pass": sum(1 for report in collection.reports if report.verdict == "pass"),
+            "skipped": len(collection.skipped),
+        },
+    }
+
+
 def render_report(report: ScanReport, *, json_output: bool = False) -> str:
     if json_output:
         return json.dumps(report_to_dict(report), indent=2, sort_keys=True)
@@ -492,4 +781,49 @@ def render_report(report: ScanReport, *, json_output: bool = False) -> str:
         if finding.snippet:
             lines.append(f"    snippet: {finding.snippet}")
     lines.extend(["", "Recommendation", f"  {report.recommendation}"])
+    return "\n".join(lines)
+
+
+def render_collection(collection: ScanCollection, *, json_output: bool = False) -> str:
+    if json_output:
+        return json.dumps(collection_to_dict(collection), indent=2, sort_keys=True)
+
+    summary = collection_to_dict(collection)["summary"]
+    lines = [
+        "Qise Preflight Scan",
+        "",
+        f"Target: {collection.target}",
+        f"Type: {collection.target_type}",
+        f"Verdict: {collection.verdict.upper()}",
+        (
+            "Reports: "
+            f"{summary['reports']} total, {summary['block']} block, "
+            f"{summary['warn']} warn, {summary['pass']} pass, "
+            f"{summary['skipped']} skipped"
+        ),
+        "",
+        "Scanned assets",
+    ]
+    if not collection.reports:
+        lines.append("  - none")
+    for report in collection.reports:
+        worst = _worst_finding(report.findings)
+        risk = product_risk_category(worst.category) if worst else "None"
+        severity = worst.severity if worst else "low"
+        lines.append(
+            f"  - [{report.verdict.upper()}] {report.target_type}: {report.target} "
+            f"({risk} / {severity}, findings={len(report.findings)})"
+        )
+        for finding in report.findings[:3]:
+            location = f" ({finding.path})" if finding.path else ""
+            lines.append(f"      - [{finding.severity}] {finding.message}{location}")
+        if len(report.findings) > 3:
+            lines.append(f"      - ... {len(report.findings) - 3} more findings")
+
+    if collection.skipped:
+        lines.extend(["", "Skipped"])
+        for item in collection.skipped:
+            lines.append(f"  - {item.agent} {item.target_type}: {item.reason}")
+
+    lines.extend(["", "Recommendation", f"  {collection.recommendation}"])
     return "\n".join(lines)

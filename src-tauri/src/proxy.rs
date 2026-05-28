@@ -9,8 +9,9 @@ use crate::parser;
 use crate::streaming;
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use axum::routing::any;
 use axum::Json;
 use bytes::Bytes;
 use reqwest::Client;
@@ -60,6 +61,10 @@ pub async fn start_proxy(
     port: u16,
     tauri_app: tauri::AppHandle,
 ) -> Result<ProxyHandle, String> {
+    if upstream_url.trim().is_empty() {
+        return Err("Cannot start embedded proxy without an upstream URL.".to_string());
+    }
+
     let guard_client = GuardClient::new(&bridge_url, 35);
     let http_client = Client::builder()
         .timeout(Duration::from_secs(60))
@@ -78,7 +83,8 @@ pub async fn start_proxy(
     });
 
     let app = axum::Router::new()
-        .fallback(handle_request)
+        .route("/", any(handle_request))
+        .route("/{*path}", any(handle_request))
         .with_state(proxy_state);
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
@@ -120,13 +126,16 @@ pub async fn stop_proxy(handle: ProxyHandle) -> Result<(), String> {
 /// Handle all incoming requests — route to intercept or passthrough.
 async fn handle_request(
     State(state): State<Arc<ProxyState>>,
-    axum::extract::Path(path): axum::extract::Path<String>,
     method: Method,
+    uri: Uri,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let path_owned = format!("/{}", path);
-    let path = path_owned.as_str();
+    let path = uri.path();
+    let forward_path = uri
+        .path_and_query()
+        .map(|path_and_query| path_and_query.as_str())
+        .unwrap_or(path);
 
     debug!("Request: {} {}", method, path);
 
@@ -137,14 +146,14 @@ async fn handle_request(
     let is_passthrough = PASSTHROUGH_PATHS.iter().any(|pp| path == *pp);
 
     if is_passthrough || !should_intercept {
-        return forward_request(&state, &method, &headers, path, &body).await;
+        return forward_request(state.as_ref(), &method, &headers, forward_path, &body).await;
     }
 
     if path == "/v1/chat/completions" && method == Method::POST {
         return handle_chat_completions(state, headers, body).await;
     }
 
-    forward_request(&state, &method, &headers, path, &body).await
+    forward_request(state.as_ref(), &method, &headers, forward_path, &body).await
 }
 
 /// Handle /v1/chat/completions with full guard pipeline.

@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="UTF-8"><style>
+@font-face { font-family: Inter; src: local('Inter'), local('Inter Display'); }
+:root{
+  --bg:#0d0f12; --card:#14161a; --card2:#181b20; --line:#1c1c1e; --line2:#252932;
+  --blue:#3385ff; --green:#34c759; --yellow:#ff9500; --red:#ff3b30;
+  --text:#f5f5f7; --muted:#aeaeb2; --weak:#636366; --white:#fff;
+}
+*{ box-sizing:border-box; }
+body{ margin:0; background:#050607; font-family:Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; color:var(--text); }
+.window{ width:900px; height:640px; background: radial-gradient(1200px 520px at 50% -160px, rgba(51,133,255,.14), transparent 48%), var(--bg); overflow:hidden; position:relative; }
+.header{ height:58px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:rgba(13,15,18,.92); }
+.brand{ display:flex; align-items:center; gap:12px; }
+.logo{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg, var(--blue), #69a7ff); display:grid; place-items:center; font-weight:800; color:white; box-shadow:0 0 28px rgba(51,133,255,.35); }
+.title{ font-size:17px; font-weight:700; letter-spacing:.2px; }
+.subtitle{ color:var(--muted); font-size:12px; margin-top:2px; }
+.actions{ display:flex; align-items:center; gap:10px; }
+.pill, .btn{ border:1px solid var(--line2); border-radius:10px; background:rgba(255,255,255,.035); color:var(--muted); padding:8px 11px; font-size:12px; }
+.btn.primary{ background:var(--blue); border-color:var(--blue); color:white; font-weight:700; box-shadow:0 0 22px rgba(51,133,255,.22); }
+.btn.danger{ background:rgba(255,59,48,.13); color:#ff9a93; border-color:rgba(255,59,48,.32); }
+.btn.green{ background:rgba(52,199,89,.13); color:#7be49a; border-color:rgba(52,199,89,.32); }
+.btn.ghost{ background:rgba(255,255,255,.03); color:var(--muted); }
+.content{ height:550px; padding:20px 24px 44px; position:relative; overflow:hidden; }
+.footer{ height:32px; position:absolute; bottom:0; left:0; right:0; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; padding:0 24px; color:var(--muted); font-size:12px; background:rgba(13,15,18,.95); }
+.footer span{ display:flex; align-items:center; gap:7px; }
+.dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--weak); box-shadow:0 0 12px rgba(255,255,255,.12); }
+.dot.green{ background:var(--green); box-shadow:0 0 15px rgba(52,199,89,.45); }
+.dot.yellow{ background:var(--yellow); box-shadow:0 0 15px rgba(255,149,0,.42); }
+.dot.red{ background:var(--red); box-shadow:0 0 15px rgba(255,59,48,.42); }
+.card{ background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.018)), var(--card); border:1px solid var(--line2); border-radius:18px; box-shadow:0 18px 50px rgba(0,0,0,.2); }
+.card.pad{ padding:18px; }
+.grid{ display:grid; gap:14px; }
+.muted{ color:var(--muted); } .weak{ color:var(--weak); }
+.h1{ font-size:26px; font-weight:760; letter-spacing:-.4px; }
+.h2{ font-size:18px; font-weight:720; } .h3{ font-size:14px; font-weight:700; }
+.small{ font-size:12px; } .tiny{ font-size:11px; }
+.back{ color:#d8e8ff; display:flex; align-items:center; gap:8px; font-size:13px; }
+.page-title{ display:flex; align-items:center; gap:12px; }
+.iconbox{ width:42px; height:42px; border-radius:14px; display:grid; place-items:center; background:rgba(51,133,255,.13); color:#8fc0ff; border:1px solid rgba(51,133,255,.22); font-size:21px; }
+.iconbox.green{ background:rgba(52,199,89,.14); color:#7be49a; border-color:rgba(52,199,89,.25); }
+.iconbox.red{ background:rgba(255,59,48,.13); color:#ff8d86; border-color:rgba(255,59,48,.26); }
+.iconbox.yellow{ background:rgba(255,149,0,.13); color:#ffd18c; border-color:rgba(255,149,0,.28); }
+.tag{ display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 9px; font-size:11px; border:1px solid var(--line2); background:rgba(255,255,255,.035); color:var(--muted); }
+.tag.green{ color:#80e69e; border-color:rgba(52,199,89,.25); background:rgba(52,199,89,.09); }
+.tag.yellow{ color:#ffd08a; border-color:rgba(255,149,0,.26); background:rgba(255,149,0,.09); }
+.tag.red{ color:#ff8d86; border-color:rgba(255,59,48,.26); background:rgba(255,59,48,.09); }
+.row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.divider{ height:1px; background:var(--line); margin:12px 0; }
+.code{ background:#0b0d10; border:1px solid var(--line2); border-radius:12px; padding:12px 14px; font-family:'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace; color:#d8e8ff; font-size:12px; }
+.input{ background:#0f1115; border:1px solid var(--line2); border-radius:11px; padding:10px 12px; color:var(--text); min-height:36px; }
+.toggle{ width:46px; height:24px; border-radius:999px; background:rgba(52,199,89,.25); border:1px solid rgba(52,199,89,.38); position:relative; }
+.toggle:after{ content:''; position:absolute; width:18px; height:18px; top:2px; right:3px; background:var(--green); border-radius:50%; box-shadow:0 0 14px rgba(52,199,89,.5); }
+.kbd{ font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:4px 7px; border-radius:7px; background:#0a0c10; border:1px solid var(--line2); color:#cdd7e5; }
+</style></head><body><div class="window">
+    <div class="header">
+      <div class="page-title"><div class="back">← Back to Home</div><div style="height:22px;width:1px;background:var(--line2)"></div><div><div class="title">Application Settings</div><div class="subtitle">Qise Desktop</div></div></div>
+      <div class="actions"></div>
+    </div>
+<div class="content">
+  <div class="card pad" style="height:130px"><div class="row"><div><div class="h2">Integration Mode</div><div class="small muted" style="margin-top:8px">Proxy mode is the default zero-code path for desktop users.</div></div><div class="input" style="width:220px">Proxy (zero-code) ▲</div></div><div class="row" style="margin-top:18px"><div><span class="small muted">Proxy Port:</span> <span class="kbd">8822</span></div><div style="display:flex;gap:24px"><div class="small muted">Auto Takeover <span class="toggle" style="display:inline-block;vertical-align:middle;margin-left:8px"></span></div><div class="small muted">Crash Recovery <span class="toggle" style="display:inline-block;vertical-align:middle;margin-left:8px"></span></div></div></div></div>
+  <div class="card pad" style="height:318px; margin-top:16px"><div class="h2">Model Configuration</div><div class="divider"></div><div class="grid" style="grid-template-columns:90px 100px 1fr; gap:12px; align-items:center"><div class="h3">SLM</div><div class="small muted">Base URL</div><div class="input">http://localhost:11434/v1</div><div></div><div class="small muted">Model</div><div class="input">qwen3:4b</div><div class="h3" style="margin-top:12px">LLM</div><div class="small muted" style="margin-top:12px">Base URL</div><div class="input" style="margin-top:12px"> </div><div></div><div class="small muted">Model</div><div class="input"> </div></div></div>
+  <div style="display:flex;gap:12px;margin-top:16px"><div class="btn primary" style="width:120px;text-align:center">Save</div><div class="btn ghost" style="width:120px;text-align:center">Reset</div></div>
+</div><div class="footer"><span><i class="dot green"></i> Proxy: 127.0.0.1:8822</span><span><i class="dot yellow"></i> SLM: offline</span><span>v0.2.0</span></div></div></body></html>

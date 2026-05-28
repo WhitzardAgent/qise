@@ -19,33 +19,20 @@ pub struct BridgeHandle {
 /// 2. Spawn the subprocess
 /// 3. Wait for health check to pass (up to 30s)
 pub async fn start_bridge(port: u16, config_path: &str) -> Result<BridgeHandle, String> {
-    let qise_bin = find_qise_binary()?;
+    let invocation = crate::qise_cli::resolve()?;
+    let args = vec![
+        "bridge".to_string(),
+        "start".to_string(),
+        "--port".to_string(),
+        port.to_string(),
+        "--config".to_string(),
+        config_path.to_string(),
+    ];
 
-    let args = if qise_bin.ends_with("python") || qise_bin.ends_with("python3") {
-        vec![
-            "-m".to_string(),
-            "qise".to_string(),
-            "bridge".to_string(),
-            "start".to_string(),
-            "--port".to_string(),
-            port.to_string(),
-            "--config".to_string(),
-            config_path.to_string(),
-        ]
-    } else {
-        vec![
-            "bridge".to_string(),
-            "start".to_string(),
-            "--port".to_string(),
-            port.to_string(),
-            "--config".to_string(),
-            config_path.to_string(),
-        ]
-    };
+    info!("Starting bridge: {}", invocation.display(&args));
 
-    info!("Starting bridge: {} {}", qise_bin, args.join(" "));
-
-    let child = std::process::Command::new(&qise_bin)
+    let child = invocation
+        .command()
         .args(&args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -135,47 +122,6 @@ pub async fn stop_bridge(mut handle: BridgeHandle) -> Result<(), String> {
             Ok(())
         }
     }
-}
-
-/// Find the qise binary — try `qise` first, then `python -m qise`.
-fn find_qise_binary() -> Result<String, String> {
-    // Try 1: `which qise`
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("qise")
-        .output()
-    {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                info!("Found qise at: {}", path);
-                return Ok(path);
-            }
-        }
-    }
-
-    // Try 2: `which python3`
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("python3")
-        .output()
-    {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                // Verify `python3 -m qise` works
-                if let Ok(check) = std::process::Command::new(&path)
-                    .args(["-m", "qise", "--help"])
-                    .output()
-                {
-                    if check.status.success() {
-                        info!("Using python3 at: {} (with -m qise)", path);
-                        return Ok(path);
-                    }
-                }
-            }
-        }
-    }
-
-    Err("Could not find qise CLI or python3 with qise module. Install with: pip install -e .".into())
 }
 
 fn debug_early(attempt: usize, msg: &str) {

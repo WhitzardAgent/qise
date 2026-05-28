@@ -9,10 +9,10 @@ export default function StatusIndicator({ enabled }: StatusIndicatorProps) {
         className={`w-6 h-6 rounded-full ${
           enabled
             ? "bg-qise-green glow-green"
-            : "bg-[#3a3b3c]"
+            : "bg-[var(--indicator-muted)]"
         }`}
       />
-      <span className="text-sm text-[#f9f9f9] tracking-wide">
+      <span className="text-sm text-[var(--text-primary)] tracking-wide">
         {enabled ? "Protected" : "Unprotected"}
       </span>
     </div>

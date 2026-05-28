@@ -100,11 +100,14 @@ def render_status(status: dict[str, Any], *, json_output: bool = False) -> str:
             if record.get("backup_path"):
                 lines.append(f"    backup: {record['backup_path']}")
     lines.extend(["", "Agents"])
-    for agent in status["detected_agents"]:
-        install = "installed" if agent["installed"] else "not found"
-        protected_text = "protected" if agent["protected"] else "not protected"
-        suffix = " (experimental)" if agent["experimental"] else ""
-        lines.append(f"  {agent['name']}: {install}, {protected_text}{suffix}")
+    if status["detected_agents"]:
+        for agent in status["detected_agents"]:
+            install = "installed" if agent["installed"] else "not found"
+            protected_text = "protected" if agent["protected"] else "not protected"
+            suffix = " (experimental)" if agent["experimental"] else ""
+            lines.append(f"  {agent['name']}: {install}, {protected_text}{suffix}")
+    else:
+        lines.append("  none detected")
 
     lines.extend([
         "",

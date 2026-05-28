@@ -191,6 +191,12 @@ def _spawn_service(name: str, cmd: list[str], port: int, env: dict[str, str]) ->
     }
 
 
+def _qise_service_command(config_args: list[str], service_args: list[str]) -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *config_args, *service_args]
+    return [sys.executable, "-m", "qise", *config_args, *service_args]
+
+
 def start_managed_services(
     *,
     config_path: str | None,
@@ -210,21 +216,13 @@ def start_managed_services(
     services = state.setdefault("services", {})
     config_args = ["--config", config_path] if config_path else []
 
-    bridge_cmd = [
-        sys.executable,
-        "-m",
-        "qise",
-        *config_args,
+    bridge_cmd = _qise_service_command(config_args, [
         "bridge",
         "start",
         "--port",
         str(bridge_port),
-    ]
-    proxy_cmd = [
-        sys.executable,
-        "-m",
-        "qise",
-        *config_args,
+    ])
+    proxy_cmd = _qise_service_command(config_args, [
         "proxy",
         "start",
         "--port",
@@ -232,7 +230,7 @@ def start_managed_services(
         "--upstream",
         upstream_url.rstrip("/"),
         "--no-reload",
-    ]
+    ])
     if upstream_api_key:
         proxy_cmd.extend(["--upstream-key", upstream_api_key])
 

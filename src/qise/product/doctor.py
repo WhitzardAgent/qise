@@ -90,7 +90,7 @@ def run_doctor(config_path: str | None = None) -> dict[str, Any]:
     checks.append({"name": "SLM", "status": slm_check_status, "detail": slm_detail})
 
     agents = detect_agents()
-    if not any(agent["installed"] for agent in agents):
+    if not agents:
         warnings.append("No supported Agent CLI/config was detected. Manual custom proxy mode is still available.")
 
     result = "ready"
@@ -122,11 +122,14 @@ def render_doctor(report: dict[str, Any], *, json_output: bool = False) -> str:
             lines.append(f"  {check['name']}: {check['detail']} {check['status']}")
     lines.append("")
     lines.append("Agents")
-    for agent in report["agents"]:
-        install = "installed" if agent["installed"] else "not found"
-        protected = "protected" if agent["protected"] else "not protected"
-        suffix = ", experimental" if agent["experimental"] else ""
-        lines.append(f"  {agent['name']}: {install}, {protected}{suffix}")
+    if report["agents"]:
+        for agent in report["agents"]:
+            install = "installed" if agent["installed"] else "not found"
+            protected = "protected" if agent["protected"] else "not protected"
+            suffix = ", experimental" if agent["experimental"] else ""
+            lines.append(f"  {agent['name']}: {install}, {protected}{suffix}")
+    else:
+        lines.append("  none detected")
     lines.append("")
     lines.append("Config")
     for check in report["checks"]:
