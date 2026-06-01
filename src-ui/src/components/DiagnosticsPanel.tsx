@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppStatus, normalizeStatus, portLabel, slmLabel } from "../lib/api";
+import { AppStatus, normalizeStatus, slmLabel } from "../lib/api";
+import { portStatusLabel, slmStatusLabel, statusWord, tr, type Locale } from "../lib/locale";
 
 interface DoctorCheck {
   name: string;
@@ -27,7 +28,7 @@ interface SlmReport {
 }
 
 function statusTone(status: string): string {
-  const normalized = status.toLowerCase();
+  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (["ok", "ready", "available"].includes(normalized)) return "badge-pass";
   if (["warning", "warn", "ready_with_warnings", "not_configured", "busy"].includes(normalized)) return "badge-warn";
   return "badge-block";
@@ -37,23 +38,25 @@ function DetailRow({
   label,
   value,
   tone,
+  locale,
 }: {
   label: string;
   value: string;
   tone?: string;
+  locale: Locale;
 }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-[var(--bg-card)] px-3 py-2">
       <span className="text-xs text-[var(--text-tertiary)]">{label}</span>
       <span className="min-w-0 flex-1 truncate text-right text-xs font-mono text-[var(--text-secondary)]">
-        {value || "unknown"}
+        {value || statusWord(locale, "unknown")}
       </span>
-      {tone && <span className={statusTone(tone)}>{tone}</span>}
+      {tone && <span className={statusTone(tone)}>{statusWord(locale, tone)}</span>}
     </div>
   );
 }
 
-export default function DiagnosticsPanel() {
+export default function DiagnosticsPanel({ locale }: { locale: Locale }) {
   const [doctor, setDoctor] = useState<DoctorReport | null>(null);
   const [slm, setSlm] = useState<SlmReport | null>(null);
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -102,20 +105,20 @@ export default function DiagnosticsPanel() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium uppercase tracking-wide text-[var(--text-primary)]">
-            Diagnostics
+            {tr(locale, "Diagnostics", "系统诊断")}
           </h3>
           <p className="mt-1 text-xs font-mono text-[var(--text-dim)]">
             Qise {qiseVersion} · Python {pythonVersion}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {doctor && <span className={statusTone(doctor.result)}>{doctor.result}</span>}
+          {doctor && <span className={statusTone(doctor.result)}>{statusWord(locale, doctor.result)}</span>}
           <button
             className="rounded-[43px] bg-[var(--bg-card)] px-3 py-1 text-xs font-medium text-[var(--text-tertiary)] transition-opacity hover:opacity-60 disabled:opacity-40"
             disabled={loading}
             onClick={loadDiagnostics}
           >
-            {loading ? "Checking..." : "Refresh"}
+            {loading ? tr(locale, "Checking...", "正在检查...") : tr(locale, "Refresh", "刷新")}
           </button>
         </div>
       </div>
@@ -126,14 +129,14 @@ export default function DiagnosticsPanel() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-          <DetailRow label="Protection" value={Object.keys(status?.protected_agents ?? {}).length > 0 ? "protected" : "unprotected"} />
-          <DetailRow label="Proxy" value={status ? portLabel(status.proxy, status.proxy_port ?? 8822) : proxy?.detail ?? ""} tone={proxy?.status} />
-          <DetailRow label="Bridge" value={status ? portLabel(status.bridge, status.bridge_port ?? 8823) : bridge?.detail ?? ""} tone={bridge?.status} />
-          <DetailRow label="Config" value={status?.config ?? config?.detail ?? ""} tone={config?.status} />
-          <DetailRow label="Events" value={status?.events_path ?? eventLog?.detail ?? ""} tone={eventLog?.status} />
-          <DetailRow label="Upstream" value={upstream?.detail ?? "unknown"} tone={upstream?.status} />
-          <DetailRow label="SLM" value={slm ? `${slm.verification} · ${slm.model || slm.provider || "none"}` : slmLabel(status)} tone={slm?.verification} />
-          <DetailRow label="SLM Config" value={slm?.config_path ?? "unknown"} />
+          <DetailRow locale={locale} label={tr(locale, "Protection", "保护状态")} value={Object.keys(status?.protected_agents ?? {}).length > 0 ? statusWord(locale, "protected") : statusWord(locale, "unprotected")} />
+          <DetailRow locale={locale} label={tr(locale, "Proxy", "代理")} value={status ? portStatusLabel(locale, status.proxy, status.proxy_port ?? 8822) : proxy?.detail ?? ""} tone={proxy?.status} />
+          <DetailRow locale={locale} label={tr(locale, "Bridge", "桥接")} value={status ? portStatusLabel(locale, status.bridge, status.bridge_port ?? 8823) : bridge?.detail ?? ""} tone={bridge?.status} />
+          <DetailRow locale={locale} label={tr(locale, "Config", "配置")} value={status?.config ?? config?.detail ?? ""} tone={config?.status} />
+          <DetailRow locale={locale} label={tr(locale, "Events", "事件")} value={status?.events_path ?? eventLog?.detail ?? ""} tone={eventLog?.status} />
+          <DetailRow locale={locale} label={tr(locale, "Upstream", "上游")} value={upstream?.detail ?? statusWord(locale, "unknown")} tone={upstream?.status} />
+          <DetailRow locale={locale} label={tr(locale, "SLM", "本地小模型")} value={slm ? `${slmStatusLabel(locale, slm.verification)} · ${slm.model || slm.provider || statusWord(locale, "none")}` : slmStatusLabel(locale, slmLabel(status))} tone={slm?.verification} />
+          <DetailRow locale={locale} label={tr(locale, "SLM Config", "小模型配置")} value={slm?.config_path ?? statusWord(locale, "unknown")} />
         </div>
       )}
 

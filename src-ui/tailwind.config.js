@@ -4,17 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        "qise-deep": "#f3f8fc",
+        "qise-deep": "#ffffff",
         "qise-surface": "#ffffff",
-        "qise-card": "#edf5fa",
-        "qise-red": "#ff5f6f",
-        "qise-blue": "#2878d8",
-        "qise-green": "#1c9f78",
-        "qise-yellow": "#d99016",
+        "qise-card": "#f4f4f4",
+        "qise-red": "#b74134",
+        "qise-blue": "#3e6ae1",
+        "qise-green": "#2f7d62",
+        "qise-yellow": "#8a6a24",
       },
       fontFamily: {
-        sans: ['"Inter"', "system-ui", "sans-serif"],
-        mono: ['"GeistMono"', "ui-monospace", "monospace"],
+        sans: ['"Universal Sans Text"', "-apple-system", "BlinkMacSystemFont", '"Segoe UI"', "Arial", "sans-serif"],
+        mono: ['"SFMono-Regular"', '"GeistMono"', "ui-monospace", "monospace"],
       },
     },
   },

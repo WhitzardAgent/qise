@@ -1,15 +1,11 @@
 import type { GuardInfo } from "../lib/api";
+import { modeLabel, pipelineLabel, tr, type Locale } from "../lib/locale";
 
 interface GuardListProps {
   guards: GuardInfo[];
   onSetMode: (guardName: string, mode: string) => void;
+  locale: Locale;
 }
-
-const PIPELINE_LABELS: Record<string, string> = {
-  ingress: "Ingress",
-  egress: "Egress",
-  output: "Output",
-};
 
 const MODES = ["observe", "enforce", "off"] as const;
 
@@ -52,7 +48,7 @@ const PIPELINE_ICON_CLASSES: Record<string, string> = {
   output: "qise-pipeline-output",
 };
 
-export default function GuardList({ guards, onSetMode }: GuardListProps) {
+export default function GuardList({ guards, onSetMode, locale }: GuardListProps) {
   // Group by pipeline
   const grouped = guards.reduce(
     (acc, g) => {
@@ -77,9 +73,11 @@ export default function GuardList({ guards, onSetMode }: GuardListProps) {
             <div className="qise-pipeline-header">
               <span className={`qise-pipeline-icon ${iconClass}`}>{icon}</span>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                {PIPELINE_LABELS[pipeline] || pipeline}
+                {pipelineLabel(locale, pipeline)}
               </h3>
-              <span className="text-xs text-[var(--text-dim)]">{pipelineGuards.length} guards</span>
+              <span className="text-xs text-[var(--text-dim)]">
+                {pipelineGuards.length} {tr(locale, "guards", "个守卫")}
+              </span>
             </div>
             <div className="space-y-1">
               {pipelineGuards.map((guard) => (
@@ -90,10 +88,10 @@ export default function GuardList({ guards, onSetMode }: GuardListProps) {
                     </span>
                     <span className={modeBadgeClass(guard.mode)}>
                       <span className="badge-dot" />
-                      {guard.mode.toUpperCase()}
+                      {modeLabel(locale, guard.mode)}
                     </span>
                     <span className="rounded-full bg-white px-2 py-1 text-[11px] font-mono text-[var(--text-dim)] ring-1 ring-[var(--border-subtle)]">
-                      {guard.primary_strategy === "ai" ? "AI-first" : "Rules"}
+                      {guard.primary_strategy === "ai" ? tr(locale, "AI first", "模型优先") : tr(locale, "Rules", "规则")}
                     </span>
                   </div>
                   <div className="flex gap-1">
@@ -103,7 +101,7 @@ export default function GuardList({ guards, onSetMode }: GuardListProps) {
                         className={guardModeBtnClass(mode, guard.mode === mode)}
                         onClick={() => onSetMode(guard.name, mode)}
                       >
-                        {mode}
+                        {modeLabel(locale, mode)}
                       </button>
                     ))}
                   </div>

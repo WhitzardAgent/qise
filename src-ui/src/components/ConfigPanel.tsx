@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ReactNode } from "react";
 import DiagnosticsPanel from "./DiagnosticsPanel";
+import { tr, type Locale } from "../lib/locale";
 
 interface SLMConfig {
   base_url: string;
@@ -160,13 +161,15 @@ function ConfigToggle({
   );
 }
 
-const GUARD_MODES = [
-  { value: "observe", label: "Observe (log only)" },
-  { value: "enforce", label: "Enforce (block)" },
-  { value: "off", label: "Off (disabled)" },
-];
+function guardModeOptions(locale: Locale) {
+  return [
+    { value: "observe", label: tr(locale, "Observe (log only)", "观察（仅记录）") },
+    { value: "enforce", label: tr(locale, "Enforce (block)", "拦截（阻止）") },
+    { value: "off", label: tr(locale, "Off (disabled)", "关闭（禁用）") },
+  ];
+}
 
-export default function ConfigPanel() {
+export default function ConfigPanel({ locale }: { locale: Locale }) {
   const [config, setConfig] = useState<ShieldConfig | null>(null);
   const [originalConfig, setOriginalConfig] = useState<ShieldConfig | null>(null);
   const [configPath, setConfigPath] = useState<string>("");
@@ -199,7 +202,7 @@ export default function ConfigPanel() {
   async function handleSave() {
     if (!config) return;
     const target = configPath || "~/.qise/shield.yaml";
-    if (!window.confirm(`Save configuration to ${target}?`)) return;
+    if (!window.confirm(tr(locale, `Save configuration to ${target}?`, `保存配置到 ${target}？`))) return;
     setSaving(true);
     setError(null);
     try {
@@ -229,7 +232,7 @@ export default function ConfigPanel() {
       <div className="qise-card p-6 text-center">
         <p className="inline-flex items-center justify-center gap-2 text-sm text-[var(--text-dim)]">
           {!error && <span className="qise-spinner qise-spinner-blue" />}
-          {error ? `Error: ${error}` : "Loading configuration..."}
+          {error ? `${tr(locale, "Error", "错误")}：${error}` : tr(locale, "Loading configuration...", "正在加载配置...")}
         </p>
       </div>
     );
@@ -318,7 +321,7 @@ export default function ConfigPanel() {
 
   return (
     <div className="space-y-6">
-      <DiagnosticsPanel />
+      <DiagnosticsPanel locale={locale} />
 
       {/* Action bar */}
       <div className="flex flex-wrap items-center gap-3">
@@ -332,20 +335,20 @@ export default function ConfigPanel() {
           }`}
         >
           {saving ? (
-            <span className="inline-flex items-center gap-2"><span className="qise-spinner" />Saving...</span>
-          ) : saveSuccess ? "Saved" : "Save"}
+            <span className="inline-flex items-center gap-2"><span className="qise-spinner" />{tr(locale, "Saving...", "正在保存...")}</span>
+          ) : saveSuccess ? tr(locale, "Saved", "已保存") : tr(locale, "Save", "保存")}
         </button>
         <button
           onClick={handleReset}
           className="px-5 py-2 rounded-[43px] text-sm font-medium bg-[var(--bg-card)] text-[var(--text-tertiary)] hover:opacity-60 transition-all"
         >
-          Reset to Default
+          {tr(locale, "Reset to Default", "恢复默认")}
         </button>
         {hasChanges && (
-          <span className="text-xs text-qise-yellow">Unsaved changes</span>
+          <span className="text-xs text-qise-yellow">{tr(locale, "Unsaved changes", "有未保存改动")}</span>
         )}
         <span className="text-xs text-[var(--text-dim)] font-mono truncate max-w-full">
-          Target: {configPath || "~/.qise/shield.yaml"}
+          {tr(locale, "Target", "目标")}：{configPath || "~/.qise/shield.yaml"}
         </span>
       </div>
 
@@ -356,42 +359,42 @@ export default function ConfigPanel() {
       )}
 
       {/* Models Section */}
-      <ConfigCard title="SLM Model" unsaved={JSON.stringify(config.models.slm) !== JSON.stringify(originalConfig?.models.slm)}>
+      <ConfigCard title={tr(locale, "SLM Model", "小模型")} unsaved={JSON.stringify(config.models.slm) !== JSON.stringify(originalConfig?.models.slm)}>
         <ConfigInput
-          label="Base URL"
+          label={tr(locale, "Base URL", "基础地址")}
           value={config.models.slm.base_url}
           onChange={(v) => updateSlm("base_url", v)}
           placeholder="http://localhost:11434/v1"
         />
         <ConfigInput
-          label="Model"
+          label={tr(locale, "Model", "模型")}
           value={config.models.slm.model}
           onChange={(v) => updateSlm("model", v)}
           placeholder="qwen3:4b"
         />
         <ConfigInput
-          label="Timeout (ms)"
+          label={tr(locale, "Timeout (ms)", "超时（毫秒）")}
           value={config.models.slm.timeout_ms}
           onChange={(v) => updateSlm("timeout_ms", parseInt(v) || 0)}
           type="number"
         />
       </ConfigCard>
 
-      <ConfigCard title="LLM Model" unsaved={JSON.stringify(config.models.llm) !== JSON.stringify(originalConfig?.models.llm)}>
+      <ConfigCard title={tr(locale, "LLM Model", "大模型")} unsaved={JSON.stringify(config.models.llm) !== JSON.stringify(originalConfig?.models.llm)}>
         <ConfigInput
-          label="Base URL"
+          label={tr(locale, "Base URL", "基础地址")}
           value={config.models.llm.base_url}
           onChange={(v) => updateLlm("base_url", v)}
           placeholder="https://api.anthropic.com"
         />
         <ConfigInput
-          label="Model"
+          label={tr(locale, "Model", "模型")}
           value={config.models.llm.model}
           onChange={(v) => updateLlm("model", v)}
           placeholder="claude-sonnet-4-5"
         />
         <ConfigInput
-          label="Timeout (ms)"
+          label={tr(locale, "Timeout (ms)", "超时（毫秒）")}
           value={config.models.llm.timeout_ms}
           onChange={(v) => updateLlm("timeout_ms", parseInt(v) || 0)}
           type="number"
@@ -399,14 +402,14 @@ export default function ConfigPanel() {
       </ConfigCard>
 
       {/* Integration Section */}
-      <ConfigCard title="Integration">
+      <ConfigCard title={tr(locale, "Integration", "集成")}>
         <ConfigSelect
-          label="Mode"
+          label={tr(locale, "Mode", "模式")}
           value={config.integration.mode}
           options={[
-            { value: "proxy", label: "Proxy (zero-code)" },
-            { value: "sdk", label: "SDK (code)" },
-            { value: "mcp", label: "MCP (limited)" },
+            { value: "proxy", label: tr(locale, "Proxy (zero-code)", "代理（零代码）") },
+            { value: "sdk", label: tr(locale, "SDK (code)", "开发包（代码集成）") },
+            { value: "mcp", label: tr(locale, "MCP (limited)", "协议服务（受限）") },
           ]}
           onChange={(v) =>
             setConfig((prev) =>
@@ -415,25 +418,25 @@ export default function ConfigPanel() {
           }
         />
         <ConfigInput
-          label="Proxy Port"
+          label={tr(locale, "Proxy Port", "代理端口")}
           value={config.integration.proxy.port}
           onChange={(v) => updateProxy("port", parseInt(v) || 8822)}
           type="number"
         />
         <ConfigInput
-          label="Upstream URL"
+          label={tr(locale, "Upstream URL", "上游地址")}
           value={config.integration.proxy.upstream_url ?? ""}
           onChange={(v) => updateProxy("upstream_url", v)}
           placeholder="https://api.openai.com/v1"
         />
         <ConfigInput
-          label="Upstream API Key"
+          label={tr(locale, "Upstream API Key", "上游密钥")}
           value={config.integration.proxy.upstream_api_key ?? ""}
           onChange={(v) => updateProxy("upstream_api_key", v)}
-          placeholder="Optional; prefer env vars for real secrets"
+          placeholder={tr(locale, "Optional; prefer env vars for real secrets", "可选；真实密钥建议使用环境变量")}
         />
         <ConfigInput
-          label="Target Agents"
+          label={tr(locale, "Target Agents", "目标智能体")}
           value={(config.integration.proxy.target_agents ?? []).join(", ")}
           onChange={(v) =>
             updateProxy(
@@ -444,12 +447,12 @@ export default function ConfigPanel() {
           placeholder="codex, openclaw"
         />
         <ConfigToggle
-          label="Auto Takeover"
+          label={tr(locale, "Auto Takeover", "自动接管")}
           checked={config.integration.proxy.auto_takeover}
           onChange={(v) => updateProxy("auto_takeover", v)}
         />
         <ConfigToggle
-          label="Crash Recovery"
+          label={tr(locale, "Crash Recovery", "崩溃恢复")}
           checked={config.integration.proxy.crash_recovery}
           onChange={(v) => updateProxy("crash_recovery", v)}
         />
@@ -457,9 +460,9 @@ export default function ConfigPanel() {
 
       {/* Guards Section — grouped by pipeline */}
       {[
-        { title: "Ingress Guards", guards: ingressGuards },
-        { title: "Egress Guards", guards: egressGuards },
-        { title: "Output Guards", guards: outputGuards },
+        { title: tr(locale, "Ingress Guards", "入口守卫"), guards: ingressGuards },
+        { title: tr(locale, "Egress Guards", "出口守卫"), guards: egressGuards },
+        { title: tr(locale, "Output Guards", "输出守卫"), guards: outputGuards },
       ].map((group) => (
         <ConfigCard key={group.title} title={group.title}>
           {group.guards.map((guardName) => {
@@ -480,14 +483,14 @@ export default function ConfigPanel() {
                 {enabled && gc && (
                   <div className="ml-36 space-y-2">
                     <ConfigSelect
-                      label="Mode"
+                      label={tr(locale, "Mode", "模式")}
                       value={gc.mode || "observe"}
-                      options={GUARD_MODES}
+                      options={guardModeOptions(locale)}
                       onChange={(v) => updateGuardConfig(guardName, "mode", v)}
                     />
                     {gc.slm_confidence_threshold !== null && gc.slm_confidence_threshold !== undefined && (
                       <ConfigInput
-                        label="SLM Threshold"
+                        label={tr(locale, "SLM Threshold", "模型阈值")}
                         value={gc.slm_confidence_threshold}
                         onChange={(v) =>
                           updateGuardConfig(guardName, "slm_confidence_threshold", parseFloat(v) || 0.7)

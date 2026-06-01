@@ -1,8 +1,11 @@
+import { tr, type Locale } from "../lib/locale";
+
 interface StatusIndicatorProps {
   enabled: boolean;
+  locale?: Locale;
 }
 
-export default function StatusIndicator({ enabled }: StatusIndicatorProps) {
+export default function StatusIndicator({ enabled, locale = "en" }: StatusIndicatorProps) {
   return (
     <div className="flex items-center gap-3">
       <div
@@ -13,7 +16,7 @@ export default function StatusIndicator({ enabled }: StatusIndicatorProps) {
         }`}
       />
       <span className="text-sm text-[var(--text-primary)] tracking-wide">
-        {enabled ? "Protected" : "Unprotected"}
+        {enabled ? tr(locale, "Protected", "已保护") : tr(locale, "Unprotected", "未保护")}
       </span>
     </div>
   );

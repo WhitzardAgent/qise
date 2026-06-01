@@ -7,6 +7,7 @@ import ConfigPanel from "./components/ConfigPanel";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import EventLog from "./components/EventLog";
 import GuardList from "./components/GuardList";
+import appIcon from "../../src-tauri/icons/icon.png";
 import {
   AgentInfo,
   AppStatus,
@@ -15,12 +16,22 @@ import {
   SecurityEvent,
   normalizeSecurityEvent,
   normalizeStatus,
-  portLabel,
   slmLabel,
   slmTone,
   statusEventCounts,
   statusProtectionEnabled,
 } from "./lib/api";
+import {
+  agentStatusLabel,
+  modeLabel,
+  pipelineLabel,
+  portStatusLabel,
+  slmStatusLabel,
+  statusWord,
+  tr,
+  verdictLabel,
+  type Locale,
+} from "./lib/locale";
 
 type PageId =
   | "home"
@@ -130,9 +141,9 @@ interface SlmStartRequest {
 interface FeatureItem {
   id: PageId;
   glyph: string;
-  title: string;
-  subtitle: string;
-  summary: string;
+  title: Record<Locale, string>;
+  subtitle: Record<Locale, string>;
+  summary: Record<Locale, string>;
   accent: string;
 }
 
@@ -140,89 +151,89 @@ const FEATURES: FeatureItem[] = [
   {
     id: "preflight",
     glyph: "PF",
-    title: "Preflight Scan",
-    subtitle: "Scan before you trust it",
-    summary: "Skill, MCP and Agent config checks",
+    title: { en: "Preflight Scan", zh: "上线前扫描" },
+    subtitle: { en: "Scan before you trust it", zh: "启用前先验证" },
+    summary: { en: "Skill, MCP and Agent config checks", zh: "检查技能、协议服务与智能体配置" },
     accent: "var(--qise-blue)",
   },
   {
     id: "shield",
     glyph: "AS",
-    title: "Agent Shield",
-    subtitle: "Protect your Agent",
-    summary: "Codex, OpenClaw, Claude Code, custom",
+    title: { en: "Agent Shield", zh: "智能体防护" },
+    subtitle: { en: "Protect your Agent", zh: "接管并保护智能体" },
+    summary: { en: "Codex, OpenClaw, Claude Code, custom", zh: "支持 Codex、OpenClaw、Claude Code 与自定义智能体" },
     accent: "var(--qise-green)",
   },
   {
     id: "events",
     glyph: "EV",
-    title: "Security Events",
-    subtitle: "See what Qise blocked",
-    summary: "Runtime and preflight evidence",
+    title: { en: "Security Events", zh: "安全事件" },
+    subtitle: { en: "See what Qise blocked", zh: "查看 Qise 的拦截记录" },
+    summary: { en: "Runtime and preflight evidence", zh: "运行时与上线前证据" },
     accent: "var(--qise-red)",
   },
   {
     id: "rules",
     glyph: "GR",
-    title: "Protection Rules",
-    subtitle: "Tune guard behavior",
-    summary: "Ingress, egress and output guards",
+    title: { en: "Protection Rules", zh: "防护规则" },
+    subtitle: { en: "Tune guard behavior", zh: "调整守卫行为" },
+    summary: { en: "Ingress, egress and output guards", zh: "入口、出口与输出守卫" },
     accent: "var(--qise-yellow)",
   },
   {
     id: "slm",
     glyph: "AI",
-    title: "Local SLM",
-    subtitle: "Optional second layer",
-    summary: "Ollama or OpenAI-compatible model",
+    title: { en: "Local SLM", zh: "本地小模型" },
+    subtitle: { en: "Optional second layer", zh: "可选的第二层审查" },
+    summary: { en: "Ollama or OpenAI-compatible model", zh: "支持 Ollama 或兼容接口模型" },
     accent: "var(--qise-blue)",
   },
   {
     id: "doctor",
     glyph: "DR",
-    title: "System Doctor",
-    subtitle: "Check readiness",
-    summary: "Runtime, services and config checks",
+    title: { en: "System Doctor", zh: "系统诊断" },
+    subtitle: { en: "Check readiness", zh: "检查运行准备状态" },
+    summary: { en: "Runtime, services and config checks", zh: "检查运行时、服务与配置" },
     accent: "var(--qise-green)",
   },
   {
     id: "observer",
     glyph: "RT",
-    title: "Runtime Observer",
-    subtitle: "Record real behavior",
-    summary: "Generate qise run commands",
+    title: { en: "Runtime Observer", zh: "运行观察" },
+    subtitle: { en: "Record real behavior", zh: "记录真实行为" },
+    summary: { en: "Generate qise run commands", zh: "生成 qise run 命令" },
     accent: "var(--qise-yellow)",
   },
   {
     id: "backup",
     glyph: "BR",
-    title: "Backup & Restore",
-    subtitle: "Recover Agent configs",
-    summary: "View backups and restore safely",
+    title: { en: "Backup & Restore", zh: "备份与恢复" },
+    subtitle: { en: "Recover Agent configs", zh: "恢复智能体配置" },
+    summary: { en: "View backups and restore safely", zh: "查看备份并安全恢复" },
     accent: "var(--qise-green)",
   },
   {
     id: "integrations",
     glyph: "IN",
-    title: "Integrations",
-    subtitle: "SDK, MCP and adapters",
-    summary: "Nanobot, Hermes, NexAU, LangGraph",
+    title: { en: "Integrations", zh: "集成" },
+    subtitle: { en: "SDK, MCP and adapters", zh: "开发包、协议服务与适配器" },
+    summary: { en: "Nanobot, Hermes, NexAU, LangGraph", zh: "Nanobot、Hermes、NexAU、LangGraph" },
     accent: "var(--qise-blue)",
   },
   {
     id: "settings",
     glyph: "CF",
-    title: "Settings",
-    subtitle: "App and model config",
-    summary: "Proxy, upstream, SLM and guards",
+    title: { en: "Settings", zh: "设置" },
+    subtitle: { en: "App and model config", zh: "应用与模型配置" },
+    summary: { en: "Proxy, upstream, SLM and guards", zh: "代理、上游、模型与守卫" },
     accent: "var(--text-tertiary)",
   },
   {
     id: "advanced",
     glyph: "LB",
-    title: "Advanced Lab",
-    subtitle: "Test guards manually",
-    summary: "check and context tools",
+    title: { en: "Advanced Lab", zh: "高级实验室" },
+    subtitle: { en: "Test guards manually", zh: "手动测试守卫" },
+    summary: { en: "check and context tools", zh: "检查与上下文工具" },
     accent: "var(--qise-red)",
   },
 ];
@@ -280,6 +291,36 @@ const GUARD_PRESETS: Record<GuardPreset, Partial<Record<string, string>>> = {
 
 const ADAPTERS = ["nanobot", "hermes", "nexau", "langgraph", "openai-agents"] as const;
 
+function featureTitle(item: FeatureItem, locale: Locale): string {
+  return item.title[locale];
+}
+
+function featureSubtitle(item: FeatureItem, locale: Locale): string {
+  return item.subtitle[locale];
+}
+
+function featureGlyph(item: FeatureItem, locale: Locale): string {
+  if (locale === "en") return item.glyph;
+  const glyphs: Partial<Record<PageId, string>> = {
+    preflight: "扫",
+    shield: "护",
+    events: "事",
+    rules: "规",
+    slm: "模",
+    doctor: "诊",
+    observer: "观",
+    backup: "备",
+    integrations: "集",
+    settings: "设",
+    advanced: "实",
+  };
+  return glyphs[item.id] ?? item.glyph;
+}
+
+function scanGlyph(locale: Locale, en: string, zh: string): string {
+  return locale === "zh" ? zh : en;
+}
+
 function eventVerdict(event: SecurityEvent): string {
   return event.decision.verdict || "pass";
 }
@@ -334,6 +375,7 @@ function BusyButton({
   children,
   busy,
   busyLabel,
+  locale = "en",
   variant = "primary",
   className = "",
   disabled,
@@ -342,6 +384,7 @@ function BusyButton({
   children: ReactNode;
   busy?: boolean;
   busyLabel?: string;
+  locale?: Locale;
   variant?: "primary" | "secondary" | "danger";
   className?: string;
   disabled?: boolean;
@@ -360,7 +403,7 @@ function BusyButton({
       onClick={onClick}
     >
       {busy && <Spinner tone={variant === "primary" ? "light" : "blue"} />}
-      <span>{busy ? busyLabel || "Working..." : children}</span>
+      <span>{busy ? busyLabel || tr(locale, "Working...", "处理中...") : children}</span>
     </button>
   );
 }
@@ -436,14 +479,14 @@ function taskTone(task: TaskState<unknown>): "green" | "yellow" | "red" | "blue"
   return "yellow";
 }
 
-function taskStatusText(task: TaskState<unknown>): string {
-  if (task.status === "running") return "Running";
-  if (task.status === "succeeded") return "Done";
-  if (task.status === "failed") return "Failed";
-  return "Idle";
+function taskStatusText(task: TaskState<unknown>, locale: Locale): string {
+  if (task.status === "running") return tr(locale, "Running", "运行中");
+  if (task.status === "succeeded") return tr(locale, "Done", "完成");
+  if (task.status === "failed") return tr(locale, "Failed", "失败");
+  return tr(locale, "Idle", "空闲");
 }
 
-function TaskStrip({ tasks }: { tasks: TaskState<unknown>[] }) {
+function TaskStrip({ tasks, locale }: { tasks: TaskState<unknown>[]; locale: Locale }) {
   const visible = tasks.filter((task) => task.status !== "idle");
   if (visible.length === 0) return null;
   return (
@@ -452,7 +495,7 @@ function TaskStrip({ tasks }: { tasks: TaskState<unknown>[] }) {
         <div key={`${task.title}-${index}`} className="rounded-lg bg-[var(--bg-card)] p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
-            <StatusPill tone={taskTone(task)}>{taskStatusText(task)}</StatusPill>
+            <StatusPill tone={taskTone(task)}>{taskStatusText(task, locale)}</StatusPill>
           </div>
           <p className="mt-1 truncate text-xs text-[var(--text-tertiary)]">
             {task.status === "failed" ? task.error : task.detail || task.startedAt || ""}
@@ -460,6 +503,14 @@ function TaskStrip({ tasks }: { tasks: TaskState<unknown>[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function BrandIcon({ locale }: { locale: Locale }) {
+  return (
+    <span className="qise-brand-icon" aria-label={tr(locale, "Qise app icon", "Qise 应用图标")}>
+      <img src={appIcon} alt="" aria-hidden="true" />
+    </span>
   );
 }
 
@@ -499,18 +550,16 @@ function scanSummary(result: ScanResult | null) {
   };
 }
 
-function BootScreen({ hint }: { hint: string }) {
+function BootScreen({ hint, locale }: { hint: string; locale: Locale }) {
   return (
     <div className="min-h-screen bg-qise-deep px-5 pb-16 pt-4">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--qise-blue)] text-sm font-bold text-white">
-              Q
-            </div>
+            <BrandIcon locale={locale} />
             <div>
               <h1 className="text-xl font-semibold text-[var(--text-primary)]">Qise</h1>
-              <p className="text-sm text-[var(--text-tertiary)]">AI Agent Security</p>
+              <p className="text-sm text-[var(--text-tertiary)]">{tr(locale, "AI Agent Security", "智能体安全")}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -523,8 +572,8 @@ function BootScreen({ hint }: { hint: string }) {
           <div className="mt-4 h-4 w-[520px] max-w-full animate-pulse rounded bg-[var(--bg-card)]" />
           <p className="mt-5 text-sm text-[var(--text-tertiary)]">{hint}</p>
           <div className="mt-6 flex gap-3">
-            <div className="h-10 w-36 animate-pulse rounded-[43px] bg-[var(--bg-card)]" />
-            <div className="h-10 w-28 animate-pulse rounded-[43px] bg-[var(--bg-card)]" />
+            <div className="h-10 w-36 animate-pulse rounded bg-[var(--bg-card)]" />
+            <div className="h-10 w-28 animate-pulse rounded bg-[var(--bg-card)]" />
           </div>
         </div>
         <div className="mb-4 grid gap-4 md:grid-cols-3">
@@ -542,7 +591,7 @@ function BootScreen({ hint }: { hint: string }) {
   );
 }
 
-function ErrorBanner({ error, onDismiss }: { error: string | null; onDismiss: () => void }) {
+function ErrorBanner({ error, onDismiss, locale }: { error: string | null; onDismiss: () => void; locale: Locale }) {
   if (!error) return null;
   return (
     <div className="qise-card mb-5 flex items-start justify-between gap-3 border-l-2 border-qise-red p-3">
@@ -551,7 +600,7 @@ function ErrorBanner({ error, onDismiss }: { error: string | null; onDismiss: ()
         className="shrink-0 rounded-[43px] bg-[var(--bg-card)] px-3 py-1 text-xs text-[var(--text-tertiary)]"
         onClick={onDismiss}
       >
-        Dismiss
+        {tr(locale, "Dismiss", "关闭")}
       </button>
     </div>
   );
@@ -561,24 +610,28 @@ function PageHeader({
   page,
   onHome,
   right,
+  locale,
 }: {
   page: PageId;
   onHome: () => void;
   right?: ReactNode;
+  locale: Locale;
 }) {
   const feature = FEATURES.find((item) => item.id === page);
   if (page === "home") return null;
   return (
     <div className="qise-page-heading mb-5 flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
-        <button className="qise-back-button" onClick={onHome} title="Back to Home">
+        <button className="qise-back-button" onClick={onHome} title={tr(locale, "Back to Home", "返回首页")}>
           <span aria-hidden="true">{"<-"}</span>
-          <span>Back to Home</span>
+          <span>{tr(locale, "Back to Home", "返回首页")}</span>
         </button>
         <div className="h-7 w-px bg-[var(--border-subtle)]" />
         <div className="min-w-0">
-          <h2 className="truncate text-xl font-semibold text-[var(--text-primary)]">{feature?.title}</h2>
-          <p className="text-sm text-[var(--text-tertiary)]">Qise Desktop</p>
+          <h2 className="truncate text-xl font-semibold text-[var(--text-primary)]">
+            {feature ? featureTitle(feature, locale) : ""}
+          </h2>
+          <p className="text-sm text-[var(--text-tertiary)]">{tr(locale, "Desktop Console", "桌面控制台")}</p>
         </div>
       </div>
       {right}
@@ -604,26 +657,26 @@ function MetricTile({
   }[tone];
 
   return (
-    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2">
-      <p className="text-xs text-[var(--text-tertiary)]">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold" style={{ color }}>
+    <div className="qise-metric-tile rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2">
+      <p className="qise-metric-label text-xs text-[var(--text-tertiary)]">{label}</p>
+      <p className="qise-metric-value mt-1 font-mono text-lg font-semibold" style={{ color }} title={String(value)}>
         {value}
       </p>
     </div>
   );
 }
 
-function StatusFooter({ status }: { status: AppStatus | null }) {
+function StatusFooter({ status, locale }: { status: AppStatus | null; locale: Locale }) {
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-subtle)] bg-[rgba(243,248,252,0.94)] backdrop-blur">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-2 px-5 py-2 text-xs text-[var(--text-tertiary)] sm:grid-cols-3">
         <span className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-qise-green" />
-          Proxy: <span className="font-mono text-[var(--text-primary)]">{portLabel(status?.proxy, status?.proxy_port ?? 8822)}</span>
+          {tr(locale, "Proxy", "代理")}：<span className="font-mono text-[var(--text-primary)]">{portStatusLabel(locale, status?.proxy, status?.proxy_port ?? 8822)}</span>
         </span>
         <span className="flex items-center justify-start gap-2 sm:justify-center">
           <span className="h-2 w-2 rounded-full bg-qise-yellow" />
-          SLM: <span className="font-mono text-[var(--text-primary)]">{slmLabel(status)}</span>
+          {tr(locale, "SLM", "小模型")}：<span className="font-mono text-[var(--text-primary)]">{slmStatusLabel(locale, slmLabel(status))}</span>
         </span>
         <span className="text-left sm:text-right">
           <span className="font-mono text-[var(--text-primary)]">v0.2.0</span>
@@ -637,29 +690,41 @@ function TopBar({
   activePage,
   status,
   onOpen,
+  locale,
+  onToggleLocale,
 }: {
   activePage: PageId;
   status: AppStatus | null;
   onOpen: (page: PageId) => void;
+  locale: Locale;
+  onToggleLocale: () => void;
 }) {
   const protectedEnabled = statusProtectionEnabled(status);
   return (
     <header className="qise-topbar mb-5 flex flex-wrap items-center justify-between gap-4">
       <button className="text-left" onClick={() => onOpen("home")}>
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--qise-blue)] text-lg font-bold text-white shadow-[0_8px_20px_rgba(40,120,216,0.25)]">
-            Q
-          </div>
+          <BrandIcon locale={locale} />
           <div>
             <h1 className="text-xl font-semibold leading-tight text-[var(--text-primary)]">Qise</h1>
-            <p className="text-sm text-[var(--text-tertiary)]">AI Agent Security</p>
+            <p className="text-sm text-[var(--text-tertiary)]">{tr(locale, "AI Agent Security", "智能体安全")}</p>
           </div>
         </div>
       </button>
       <div className="flex flex-wrap items-center gap-3">
         <StatusPill tone={protectedEnabled ? "green" : "yellow"}>
-          {protectedEnabled ? "Protection ON" : "Setup needed"}
+          {protectedEnabled ? tr(locale, "Protection ON", "保护已开启") : tr(locale, "Setup needed", "需要设置")}
         </StatusPill>
+        <button
+          className="qise-lang-button"
+          onClick={onToggleLocale}
+          title={tr(locale, "Switch language", "切换语言")}
+          aria-label={tr(locale, "Switch language", "切换语言")}
+        >
+          <span className={locale === "en" ? "qise-lang-active" : ""}>EN</span>
+          <span aria-hidden="true">/</span>
+          <span className={locale === "zh" ? "qise-lang-active" : ""}>中文</span>
+        </button>
         <button
           className={`qise-nav-button ${
             activePage === "doctor"
@@ -668,7 +733,7 @@ function TopBar({
           }`}
           onClick={() => onOpen("doctor")}
         >
-          Doctor
+          {tr(locale, "Doctor", "诊断")}
         </button>
         <button
           className={`qise-nav-button ${
@@ -678,7 +743,7 @@ function TopBar({
           }`}
           onClick={() => onOpen("settings")}
         >
-          Settings
+          {tr(locale, "Settings", "设置")}
         </button>
       </div>
     </header>
@@ -692,6 +757,7 @@ function HomePage({
   onOpen,
   onDetectAgents,
   detectingAgents,
+  locale,
 }: {
   status: AppStatus | null;
   guards: GuardInfo[];
@@ -699,6 +765,7 @@ function HomePage({
   onOpen: (page: PageId) => void;
   onDetectAgents: () => void;
   detectingAgents: boolean;
+  locale: Locale;
 }) {
   const protectedEnabled = statusProtectionEnabled(status);
   const counts = statusEventCounts(status);
@@ -710,16 +777,16 @@ function HomePage({
   const featureBadges: Partial<Record<PageId, string>> = {
     events: `${counts.blocked}/${counts.warnings}`,
     rules: `${guards.length || 14}`,
-    slm: slmState,
+    slm: slmStatusLabel(locale, slmState),
     shield: `${protectedAgents.length}/${installedAgents.length || agents.length || 0}`,
     backup: `${Object.keys(status?.protected_agents ?? {}).length}`,
   };
 
-  const STATUS_GLYPH = protectedEnabled ? "\u{1F6E1}" : "⚠";
-  const mainStatus = protectedEnabled ? "Protection is ON" : "Protection needs setup";
+  const STATUS_GLYPH = protectedEnabled ? tr(locale, "ON", "开") : tr(locale, "SET", "设");
+  const mainStatus = protectedEnabled ? tr(locale, "Protection is on", "保护已开启") : tr(locale, "Protection needs setup", "保护需要设置");
   const statusDetail = protectedEnabled
-    ? `${protectedAgents.length} agents protected · Blocked ${counts.blocked} threats today · ${counts.warnings} warnings`
-    : `${installedAgents.length || agents.length || 0} agents detected · Run Preflight or protect an Agent to start`;
+    ? tr(locale, `${protectedAgents.length} agents protected · Blocked ${counts.blocked} threats today · ${counts.warnings} warnings`, `已保护 ${protectedAgents.length} 个智能体 · 今日拦截 ${counts.blocked} 次威胁 · ${counts.warnings} 条告警`)
+    : tr(locale, `${installedAgents.length || agents.length || 0} agents detected · Run Preflight or protect an Agent to start`, `已检测到 ${installedAgents.length || agents.length || 0} 个智能体 · 运行上线前扫描或保护智能体后开始`);
 
   const coreFeatures = FEATURES.filter((f) =>
     ["preflight", "shield", "events", "slm"].includes(f.id)
@@ -744,11 +811,11 @@ function HomePage({
             border: `1px solid color-mix(in srgb, ${item.accent} 22%, white)`,
           }}
         >
-          {item.glyph}
+          {featureGlyph(item, locale)}
         </div>
         <div className="qise-feature-card-body">
-          <div className="qise-feature-card-title">{item.title}</div>
-          <div className="qise-feature-card-subtitle">{item.subtitle}</div>
+          <div className="qise-feature-card-title">{featureTitle(item, locale)}</div>
+          <div className="qise-feature-card-subtitle">{featureSubtitle(item, locale)}</div>
         </div>
         {badge && (
           <span className="rounded-full bg-[var(--bg-card)] px-2 py-1 text-[11px] font-mono font-bold text-[var(--text-tertiary)] ring-1 ring-[var(--border-subtle)] shrink-0">
@@ -772,16 +839,18 @@ function HomePage({
               <h2 className="text-3xl font-bold text-[var(--text-primary)]">{mainStatus}</h2>
               <p className="mt-2 text-base text-[var(--text-secondary)]">{statusDetail}</p>
               <p className="mt-2 text-sm text-[var(--text-dim)]">
-                Local-first guard pipeline is {slmStateTone === "ready" ? "running with SLM review." : "active in rule-only mode."}
+                {slmStateTone === "ready"
+                  ? tr(locale, "The local-first guard pipeline is running with model review.", "本地优先的守卫流水线正在使用模型审查。")
+                  : tr(locale, "The local-first guard pipeline is active in rules-only mode.", "本地优先的守卫流水线正在以纯规则模式运行。")}
               </p>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-3 md:justify-end">
-            <BusyButton variant="primary" busy={detectingAgents} busyLabel="Detecting..." onClick={onDetectAgents}>
-              一键检测智能体
+            <BusyButton locale={locale} variant="primary" busy={detectingAgents} busyLabel={tr(locale, "Detecting...", "正在检测...")} onClick={onDetectAgents}>
+              {tr(locale, "Detect Agents", "检测智能体")}
             </BusyButton>
-            <BusyButton variant="secondary" onClick={() => onOpen("preflight")}>
-              Preflight Scan
+            <BusyButton locale={locale} variant="secondary" onClick={() => onOpen("preflight")}>
+              {tr(locale, "Preflight Scan", "上线前扫描")}
             </BusyButton>
           </div>
         </div>
@@ -791,20 +860,24 @@ function HomePage({
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="qise-section-label mb-0">Detected Agents</div>
+            <div className="qise-section-label mb-0">{tr(locale, "Detected Agents", "已检测智能体")}</div>
             <p className="mt-1 text-sm text-[var(--text-tertiary)]">
-              这里只显示当前电脑实际检测到的 Agent。
+              {tr(locale, "Only agents detected on this device are shown here.", "这里只显示当前设备实际检测到的智能体。")}
             </p>
           </div>
-          <BusyButton variant="secondary" busy={detectingAgents} busyLabel="Detecting..." onClick={onDetectAgents}>
-            一键检测智能体
+          <BusyButton locale={locale} variant="secondary" busy={detectingAgents} busyLabel={tr(locale, "Detecting...", "正在检测...")} onClick={onDetectAgents}>
+            {tr(locale, "Detect Agents", "检测智能体")}
           </BusyButton>
         </div>
         {installedAgents.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-3">
             {installedAgents.map((agent) => {
             const dotClass = agent.protected ? "qise-agent-dot-green" : agent.installed ? "qise-agent-dot-yellow" : "qise-agent-dot-muted";
-            const statusLabel = agent.protected ? "Protected" : agent.installed ? "Available" : "Not found";
+            const statusLabel = agent.protected
+              ? agentStatusLabel(locale, "protected")
+              : agent.installed
+                ? agentStatusLabel(locale, "available")
+                : agentStatusLabel(locale, "missing");
 
             return (
               <button key={agent.key} className="qise-agent-card group" onClick={() => onOpen("shield")}>
@@ -816,7 +889,7 @@ function HomePage({
                   </div>
                 </div>
                 <StatusPill tone={agent.protected ? "green" : "yellow"}>
-                  {agent.protected ? "Protected" : "Detected"}
+                  {agent.protected ? tr(locale, "Protected", "已保护") : tr(locale, "Detected", "已检测")}
                 </StatusPill>
               </button>
             );
@@ -824,9 +897,9 @@ function HomePage({
           </div>
         ) : (
           <div className="qise-card p-6 text-center">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">No supported Agent detected yet.</p>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">{tr(locale, "No supported agent detected yet.", "暂未检测到支持的智能体。")}</p>
             <p className="mt-2 text-sm text-[var(--text-tertiary)]">
-              安装或删除 Agent 后，点击“一键检测智能体”即可刷新这里的列表。
+              {tr(locale, "After installing or removing an agent, click Detect Agents to refresh this list.", "安装或删除智能体后，点击“检测智能体”即可刷新列表。")}
             </p>
           </div>
         )}
@@ -834,7 +907,7 @@ function HomePage({
 
       {/* === CORE FUNCTIONS === */}
       <section>
-        <div className="qise-section-label">Core Protection</div>
+        <div className="qise-section-label">{tr(locale, "Core Protection", "核心防护")}</div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {coreFeatures.map((item) => (
             <FeatureCardLarge key={item.id} item={item} badge={featureBadges[item.id]} />
@@ -845,17 +918,17 @@ function HomePage({
       {/* === SUMMARY + MORE === */}
       <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <div>
-          <div className="qise-section-label">Today&apos;s Summary</div>
+          <div className="qise-section-label">{tr(locale, "Today's Summary", "今日摘要")}</div>
           <div className="qise-card grid gap-3 p-4 sm:grid-cols-4">
-            <MetricTile label="Protected" value={protectedAgents.length} tone={protectedEnabled ? "green" : "neutral"} />
-            <MetricTile label="Blocked" value={counts.blocked} tone={counts.blocked > 0 ? "red" : "neutral"} />
-            <MetricTile label="Warnings" value={counts.warnings} tone={counts.warnings > 0 ? "yellow" : "neutral"} />
-            <MetricTile label="SLM" value={slmStateTone === "ready" ? "ON" : slmState} tone={slmStateTone === "ready" ? "green" : "yellow"} />
+            <MetricTile label={tr(locale, "Protected", "已保护")} value={protectedAgents.length} tone={protectedEnabled ? "green" : "neutral"} />
+            <MetricTile label={tr(locale, "Blocked", "已拦截")} value={counts.blocked} tone={counts.blocked > 0 ? "red" : "neutral"} />
+            <MetricTile label={tr(locale, "Warnings", "告警")} value={counts.warnings} tone={counts.warnings > 0 ? "yellow" : "neutral"} />
+            <MetricTile label={tr(locale, "SLM", "小模型")} value={slmStateTone === "ready" ? tr(locale, "ON", "开启") : slmStatusLabel(locale, slmState)} tone={slmStateTone === "ready" ? "green" : "yellow"} />
           </div>
         </div>
 
         <div>
-          <div className="qise-section-label">More Tools</div>
+          <div className="qise-section-label">{tr(locale, "More Tools", "更多工具")}</div>
           <div className="grid gap-3 sm:grid-cols-4">
             {moreFeatures.map((item) => (
               <button
@@ -863,7 +936,7 @@ function HomePage({
                 className="qise-card px-3 py-3 text-center text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--border-strong)]"
                 onClick={() => onOpen(item.id)}
               >
-                {item.title}
+                {featureTitle(item, locale)}
               </button>
             ))}
           </div>
@@ -881,6 +954,7 @@ function AgentShieldPage({
   onRestoreAll,
   onStopServices,
   onProtectCustom,
+  locale,
 }: {
   agents: AgentInfo[];
   task: TaskState<string>;
@@ -889,6 +963,7 @@ function AgentShieldPage({
   onRestoreAll: () => void;
   onStopServices: () => void;
   onProtectCustom: (baseUrl: string) => void;
+  locale: Locale;
 }) {
   const [customBaseUrl, setCustomBaseUrl] = useState("");
   const busy = task.status === "running";
@@ -897,30 +972,30 @@ function AgentShieldPage({
   return (
     <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
       <section>
-        <AgentPanel agents={agents} task={task} onProtect={onProtectAgent} onRestore={onRestoreAgent} />
+        <AgentPanel agents={agents} task={task} onProtect={onProtectAgent} onRestore={onRestoreAgent} locale={locale} />
       </section>
       <aside className="space-y-4">
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Shield Operations</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Shield Operations", "防护操作")}</h3>
           <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-            Protect patches the selected Agent config to route through Qise proxy and records a restorable backup.
+            {tr(locale, "Protect patches the selected agent config to route through the Qise proxy and records a restorable backup.", "保护操作会修改所选智能体配置，使其经由 Qise 代理，并记录可恢复备份。")}
           </p>
           <div className="mt-4 space-y-2">
-            <BusyButton className="w-full" variant="secondary" busy={busy && task.action === "restore-all"} busyLabel="Restoring..." disabled={busy} onClick={onRestoreAll}>
-              Restore All Agents
+            <BusyButton locale={locale} className="w-full" variant="secondary" busy={busy && task.action === "restore-all"} busyLabel={tr(locale, "Restoring...", "正在恢复...")} disabled={busy} onClick={onRestoreAll}>
+              {tr(locale, "Restore All Agents", "恢复全部智能体")}
             </BusyButton>
-            <BusyButton className="w-full" variant="secondary" busy={busy && task.action === "stop"} busyLabel="Stopping..." disabled={busy} onClick={onStopServices}>
-              Stop Qise Services
+            <BusyButton locale={locale} className="w-full" variant="secondary" busy={busy && task.action === "stop"} busyLabel={tr(locale, "Stopping...", "正在停止...")} disabled={busy} onClick={onStopServices}>
+              {tr(locale, "Stop Qise Services", "停止 Qise 服务")}
             </BusyButton>
           </div>
         </div>
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Custom Agent</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Custom Agent", "自定义智能体")}</h3>
           <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-            Route an OpenAI-compatible custom Agent through Qise by providing its upstream base URL.
+            {tr(locale, "Route an OpenAI-compatible custom agent through Qise by providing its upstream base URL.", "提供上游基础地址后，可让兼容接口的自定义智能体经由 Qise。")}
           </p>
           <label className="mt-3 block">
-            <span className="text-xs text-[var(--text-tertiary)]">Upstream base URL</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Upstream base URL", "上游基础地址")}</span>
             <input
               className="qise-input"
               value={customBaseUrl}
@@ -931,15 +1006,16 @@ function AgentShieldPage({
           <BusyButton
             className="mt-4 w-full"
             busy={busy && task.action === "protect:custom"}
-            busyLabel="Protecting..."
+            busyLabel={tr(locale, "Protecting...", "正在保护...")}
             disabled={busy || !customBaseUrl.trim()}
             onClick={() => onProtectCustom(customBaseUrl)}
+            locale={locale}
           >
-            Protect Custom Agent
+            {tr(locale, "Protect Custom Agent", "保护自定义智能体")}
           </BusyButton>
         </div>
         {busy && (
-          <OperationPanel title={task.title} detail={task.detail || "Qise is applying this operation in the background."} />
+          <OperationPanel title={task.title} detail={task.detail || tr(locale, "Qise is applying this operation in the background.", "Qise 正在后台执行此操作。")} />
         )}
         {!busy && output && (
           <pre className={`qise-card max-h-64 overflow-auto p-4 text-xs ${task.status === "failed" ? "text-qise-red" : "text-[var(--text-secondary)]"}`}>{output}</pre>
@@ -953,10 +1029,12 @@ function BackupRestorePage({
   status,
   onRefresh,
   setError,
+  locale,
 }: {
   status: AppStatus | null;
   onRefresh: () => Promise<void>;
   setError: (error: string | null) => void;
+  locale: Locale;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [output, setOutput] = useState("");
@@ -967,7 +1045,7 @@ function BackupRestorePage({
     setError(null);
     try {
       await invoke("restore_agent", { agent });
-      setOutput(`Restored ${agent}.`);
+      setOutput(tr(locale, `Restored ${agent}.`, `已恢复 ${agent}。`));
       await onRefresh();
     } catch (e) {
       setError(String(e));
@@ -977,7 +1055,7 @@ function BackupRestorePage({
   }
 
   async function restoreAll() {
-    if (!window.confirm("Restore all Agent configs modified by Qise?")) return;
+    if (!window.confirm(tr(locale, "Restore all agent configs modified by Qise?", "恢复所有被 Qise 修改过的智能体配置？"))) return;
     setBusy("all");
       setError(null);
     try {
@@ -996,17 +1074,17 @@ function BackupRestorePage({
       <section className="qise-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-xl font-semibold text-[var(--text-primary)]">Agent Config Backups</h3>
-            <p className="mt-1 text-sm text-[var(--text-tertiary)]">Qise keeps the original Agent config before applying protection.</p>
+          <h3 className="text-xl font-semibold text-[var(--text-primary)]">{tr(locale, "Agent Config Backups", "智能体配置备份")}</h3>
+            <p className="mt-1 text-sm text-[var(--text-tertiary)]">{tr(locale, "Qise keeps the original agent config before applying protection.", "Qise 会在启用保护前保存原始智能体配置。")}</p>
           </div>
-          <BusyButton busy={busy === "all"} busyLabel="Restoring..." disabled={busy !== null || records.length === 0} onClick={restoreAll}>
-            Restore All
+          <BusyButton locale={locale} busy={busy === "all"} busyLabel={tr(locale, "Restoring...", "正在恢复...")} disabled={busy !== null || records.length === 0} onClick={restoreAll}>
+            {tr(locale, "Restore All", "全部恢复")}
           </BusyButton>
         </div>
         <div className="mt-5 space-y-3">
           {records.length === 0 ? (
             <p className="rounded-lg bg-[var(--bg-card)] p-4 text-sm text-[var(--text-dim)]">
-              No protected Agent backups found yet. Protect an Agent first, then its backup will appear here.
+              {tr(locale, "No protected agent backups found yet. Protect an agent first, then its backup will appear here.", "暂未发现受保护智能体的备份。先保护一个智能体后，备份会显示在这里。")}
             </p>
           ) : (
             records.map(([key, record]) => (
@@ -1014,20 +1092,21 @@ function BackupRestorePage({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <StatusPill tone="green">backup ready</StatusPill>
+                      <StatusPill tone="green">{tr(locale, "backup ready", "备份就绪")}</StatusPill>
                       <p className="font-semibold text-[var(--text-primary)]">{record.display_name || record.agent || key}</p>
                     </div>
-                    <p className="mt-2 truncate font-mono text-xs text-[var(--text-tertiary)]">{record.config_path || "config path unavailable"}</p>
-                    <p className="mt-1 truncate font-mono text-xs text-[var(--text-dim)]">{record.backup_path || "backup path unavailable"}</p>
+                    <p className="mt-2 truncate font-mono text-xs text-[var(--text-tertiary)]">{record.config_path || tr(locale, "config path unavailable", "配置路径不可用")}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-[var(--text-dim)]">{record.backup_path || tr(locale, "backup path unavailable", "备份路径不可用")}</p>
                   </div>
                   <BusyButton
                     busy={busy === key}
-                    busyLabel="Restoring..."
+                    busyLabel={tr(locale, "Restoring...", "正在恢复...")}
                     variant="secondary"
                     disabled={busy !== null}
                     onClick={() => restoreAgent(key)}
+                    locale={locale}
                   >
-                    Restore
+                    {tr(locale, "Restore", "恢复")}
                   </BusyButton>
                 </div>
               </div>
@@ -1038,19 +1117,19 @@ function BackupRestorePage({
 
       <aside className="space-y-4">
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Backup Directory</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Backup Directory", "备份目录")}</h3>
           <p className="mt-3 font-mono text-xs leading-5 text-[var(--text-secondary)]">~/.qise/backups/&lt;agent&gt;/&lt;timestamp&gt;/</p>
           <p className="mt-3 text-sm leading-6 text-[var(--text-tertiary)]">
-            Restoring only touches Agent config files previously changed by Qise. It does not remove your security events.
+            {tr(locale, "Restoring only touches agent config files previously changed by Qise. It does not remove your security events.", "恢复操作只会触碰曾被 Qise 修改的智能体配置文件，不会删除安全事件。")}
           </p>
         </div>
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Last Operation</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Last Operation", "最近操作")}</h3>
           {busy ? (
-            <OperationPanel title="Restore command running..." detail="Qise is applying the selected backup through the product CLI." />
+            <OperationPanel title={tr(locale, "Restore command running...", "恢复命令运行中...")} detail={tr(locale, "Qise is applying the selected backup through the product CLI.", "Qise 正在通过命令行应用所选备份。")} />
           ) : (
             <pre className="max-h-64 overflow-auto rounded-lg bg-[var(--bg-card)] p-4 text-xs text-[var(--text-secondary)]">
-              {output || "No restore operation has run in this session."}
+              {output || tr(locale, "No restore operation has run in this session.", "本次会话尚未执行恢复操作。")}
             </pre>
           )}
         </div>
@@ -1064,11 +1143,13 @@ function PreflightPage({
   setError,
   task,
   onRunScan,
+  locale,
 }: {
   agents: AgentInfo[];
   setError: (error: string | null) => void;
   task: TaskState<ScanResult>;
   onRunScan: (request: PreflightRequest) => void;
+  locale: Locale;
 }) {
   const [mode, setMode] = useState<ScanMode>("all");
   const [path, setPath] = useState("");
@@ -1121,18 +1202,18 @@ function PreflightPage({
       <section className="qise-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-xl font-semibold text-[var(--text-primary)]">What do you want to scan?</h3>
-            <p className="mt-1 text-sm text-[var(--text-tertiary)]">Validate installed Agents and integrations before enabling them.</p>
+            <h3 className="text-xl font-semibold text-[var(--text-primary)]">{tr(locale, "What do you want to scan?", "你想扫描什么？")}</h3>
+            <p className="mt-1 text-sm text-[var(--text-tertiary)]">{tr(locale, "Validate installed agents and integrations before enabling them.", "启用前验证已安装的智能体和集成。")}</p>
           </div>
-          <StatusPill tone="green">Pre-install check</StatusPill>
+          <StatusPill tone="green">{tr(locale, "Pre-install check", "安装前检查")}</StatusPill>
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
           {[
-            { id: "all", title: "All Agents", subtitle: "One-click full scan", glyph: "ALL" },
-            { id: "agent", title: "Single Agent", subtitle: "Choose Agent and categories", glyph: "AG" },
-            { id: "agent-config", title: "Agent Config", subtitle: "Check installed config", glyph: "CFG" },
-            { id: "skill", title: "Skill Path", subtitle: "Advanced manual scan", glyph: "SK" },
-            { id: "mcp", title: "MCP Path", subtitle: "Advanced manual scan", glyph: "MCP" },
+            { id: "all", title: tr(locale, "All Agents", "全部智能体"), subtitle: tr(locale, "One-click full scan", "一键完整扫描"), glyph: scanGlyph(locale, "ALL", "全") },
+            { id: "agent", title: tr(locale, "Single Agent", "单个智能体"), subtitle: tr(locale, "Choose agent and categories", "选择智能体和类别"), glyph: scanGlyph(locale, "AG", "单") },
+            { id: "agent-config", title: tr(locale, "Agent Config", "智能体配置"), subtitle: tr(locale, "Check installed config", "检查已安装配置"), glyph: scanGlyph(locale, "CFG", "配") },
+            { id: "skill", title: tr(locale, "Skill Path", "技能路径"), subtitle: tr(locale, "Advanced manual scan", "高级手动扫描"), glyph: scanGlyph(locale, "SK", "技") },
+            { id: "mcp", title: tr(locale, "MCP Path", "协议服务路径"), subtitle: tr(locale, "Advanced manual scan", "高级手动扫描"), glyph: scanGlyph(locale, "MCP", "协") },
           ].map((item) => (
             <button
               key={item.id}
@@ -1151,7 +1232,7 @@ function PreflightPage({
         {(mode === "all" || mode === "agent") && (
           <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
             <div className="rounded-lg bg-[var(--bg-card)] p-4">
-              <p className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Agents</p>
+              <p className="mb-3 text-sm font-semibold text-[var(--text-primary)]">{tr(locale, "Agents", "智能体")}</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(agents.length ? agents : [{ key: "codex", name: "Codex" } as AgentInfo]).map((item) => (
                   <label key={item.key} className="qise-check rounded-lg bg-white px-3 py-2">
@@ -1176,19 +1257,19 @@ function PreflightPage({
               </div>
             </div>
             <div className="rounded-lg bg-[var(--bg-card)] p-4">
-              <p className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Categories</p>
+              <p className="mb-3 text-sm font-semibold text-[var(--text-primary)]">{tr(locale, "Categories", "类别")}</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 <label className="qise-check rounded-lg bg-white px-3 py-2">
                   <input type="checkbox" checked={includeSkills} onChange={(event) => setIncludeSkills(event.target.checked)} />
-                  <span>Skills</span>
+                  <span>{tr(locale, "Skills", "技能")}</span>
                 </label>
                 <label className="qise-check rounded-lg bg-white px-3 py-2">
                   <input type="checkbox" checked={includeMcp} onChange={(event) => setIncludeMcp(event.target.checked)} />
-                  <span>MCP</span>
+                  <span>{tr(locale, "MCP", "协议服务")}</span>
                 </label>
                 <label className="qise-check rounded-lg bg-white px-3 py-2">
                   <input type="checkbox" checked={includeAgentConfig} onChange={(event) => setIncludeAgentConfig(event.target.checked)} />
-                  <span>Agent config</span>
+                  <span>{tr(locale, "Agent config", "智能体配置")}</span>
                 </label>
               </div>
             </div>
@@ -1197,7 +1278,7 @@ function PreflightPage({
 
         {mode === "agent-config" && (
           <label className="mt-5 block">
-            <span className="text-xs text-[var(--text-tertiary)]">Agent config</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Agent config", "智能体配置")}</span>
             <select
               className="qise-input"
               value={agent}
@@ -1213,7 +1294,7 @@ function PreflightPage({
         {needsPath && (
           <label className="mt-4 block">
             <span className="text-xs text-[var(--text-tertiary)]">
-              {mode === "skill" ? "Skill directory or file path" : "MCP JSON/YAML config path"}
+              {mode === "skill" ? tr(locale, "Skill directory or file path", "技能目录或文件路径") : tr(locale, "MCP JSON/YAML config path", "协议服务 JSON/YAML 配置路径")}
             </span>
             <input
               className="qise-input font-mono"
@@ -1224,46 +1305,46 @@ function PreflightPage({
           </label>
         )}
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <BusyButton busy={busy} busyLabel="Scanning..." disabled={canRun} onClick={runScan}>
-            {mode === "all" ? "Scan Selected Agents" : "Run Scan"}
+          <BusyButton locale={locale} busy={busy} busyLabel={tr(locale, "Scanning...", "正在扫描...")} disabled={canRun} onClick={runScan}>
+            {mode === "all" ? tr(locale, "Scan Selected Agents", "扫描所选智能体") : tr(locale, "Run Scan", "运行扫描")}
           </BusyButton>
-          {busy && <p className="text-sm text-[var(--text-tertiary)]">Qise is running the preflight CLI in the background. You can return Home and come back here.</p>}
+          {busy && <p className="text-sm text-[var(--text-tertiary)]">{tr(locale, "Qise is running the preflight CLI in the background. You can return home and come back here.", "Qise 正在后台运行上线前扫描命令。你可以先返回首页，稍后再回到这里。")}</p>}
         </div>
       </section>
 
       <section className="qise-card p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Result</h3>
-            <p className="text-xs text-[var(--text-tertiary)]">Findings are also recorded as preflight security events.</p>
+            <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Result", "结果")}</h3>
+            <p className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Findings are also recorded as preflight security events.", "发现项也会记录为上线前安全事件。")}</p>
           </div>
-          {report?.verdict && <span className={badgeClass(report.verdict)}>{report.verdict}</span>}
+          {report?.verdict && <span className={badgeClass(report.verdict)}>{verdictLabel(locale, report.verdict)}</span>}
         </div>
         {busy ? (
-          <OperationPanel title={task.title || "Scanning Agent assets..."} detail={task.detail || "Checking selected Agent files, MCP candidates and config state."} />
+          <OperationPanel title={task.title || tr(locale, "Scanning agent assets...", "正在扫描智能体资产...")} detail={task.detail || tr(locale, "Checking selected agent files, MCP candidates and config state.", "正在检查所选智能体文件、协议服务候选项与配置状态。")} />
         ) : task.status === "failed" ? (
-          <OperationPanel title="Scan failed" detail={task.error} tone="red" />
+          <OperationPanel title={tr(locale, "Scan failed", "扫描失败")} detail={task.error} tone="red" />
         ) : !report ? (
-          <p className="rounded-lg bg-[var(--bg-card)] p-4 text-sm text-[var(--text-dim)]">Choose a target and run a scan.</p>
+          <p className="rounded-lg bg-[var(--bg-card)] p-4 text-sm text-[var(--text-dim)]">{tr(locale, "Choose a target and run a scan.", "选择目标后运行扫描。")}</p>
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
-              <MetricTile label="Reports" value={summary.reports} tone="blue" />
-              <MetricTile label="Blocks" value={summary.block} tone={summary.block > 0 ? "red" : "neutral"} />
-              <MetricTile label="Warnings" value={summary.warn} tone={summary.warn > 0 ? "yellow" : "neutral"} />
-              <MetricTile label="Findings" value={scanFindingCount(report)} tone={scanFindingCount(report) > 0 ? "yellow" : "green"} />
+              <MetricTile label={tr(locale, "Reports", "报告")} value={summary.reports} tone="blue" />
+              <MetricTile label={tr(locale, "Blocks", "拦截")} value={summary.block} tone={summary.block > 0 ? "red" : "neutral"} />
+              <MetricTile label={tr(locale, "Warnings", "告警")} value={summary.warn} tone={summary.warn > 0 ? "yellow" : "neutral"} />
+              <MetricTile label={tr(locale, "Findings", "发现项")} value={scanFindingCount(report)} tone={scanFindingCount(report) > 0 ? "yellow" : "green"} />
             </div>
             <p className="text-sm text-[var(--text-secondary)]">{report.recommendation}</p>
             <div className="grid gap-3 xl:grid-cols-2">
               {reports.length === 0 ? (
-                <p className="rounded-lg bg-[var(--bg-card)] p-3 text-sm text-[var(--text-dim)]">No findings.</p>
+                <p className="rounded-lg bg-[var(--bg-card)] p-3 text-sm text-[var(--text-dim)]">{tr(locale, "No findings.", "没有发现项。")}</p>
               ) : (
                 reports.map((item, reportIndex) => (
                   <div key={`${item.target}-${reportIndex}`} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={badgeClass(item.verdict)}>{item.verdict || "report"}</span>
+                      <span className={badgeClass(item.verdict)}>{item.verdict ? verdictLabel(locale, item.verdict) : tr(locale, "report", "报告")}</span>
                       <span className="text-xs font-mono text-[var(--text-secondary)]">{item.target_type}</span>
-                      <span className="text-xs text-[var(--text-dim)]">{item.risk?.severity || "low"}</span>
+                      <span className="text-xs text-[var(--text-dim)]">{statusWord(locale, item.risk?.severity || "low")}</span>
                     </div>
                     <p className="mt-2 truncate text-sm font-mono text-[var(--text-secondary)]">{item.target}</p>
                     {(item.findings ?? []).slice(0, 3).map((finding, index) => (
@@ -1273,7 +1354,7 @@ function PreflightPage({
                       </div>
                     ))}
                     {(item.findings ?? []).length === 0 && (
-                      <p className="mt-2 text-xs text-[var(--text-dim)]">No findings in this asset.</p>
+                      <p className="mt-2 text-xs text-[var(--text-dim)]">{tr(locale, "No findings in this asset.", "该资产没有发现项。")}</p>
                     )}
                   </div>
                 ))
@@ -1281,7 +1362,7 @@ function PreflightPage({
             </div>
             {isScanCollection(report) && (report.skipped?.length ?? 0) > 0 && (
               <div className="rounded-lg bg-[var(--bg-card)] p-3">
-                <p className="text-xs font-semibold uppercase text-[var(--text-primary)]">Skipped</p>
+                <p className="text-xs font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Skipped", "已跳过")}</p>
                 {report.skipped?.map((item, index) => (
                   <p key={`${item.agent}-${item.target_type}-${index}`} className="mt-1 text-xs text-[var(--text-tertiary)]">
                     {item.agent} · {item.target_type}: {item.reason}
@@ -1296,7 +1377,7 @@ function PreflightPage({
   );
 }
 
-function EventsPage({ events, onEvent }: { events: SecurityEvent[]; onEvent: (event: SecurityEvent) => void }) {
+function EventsPage({ events, onEvent, locale }: { events: SecurityEvent[]; onEvent: (event: SecurityEvent) => void; locale: Locale }) {
   const [copied, setCopied] = useState(false);
   async function exportJson() {
     await copyText(JSON.stringify(events, null, 2));
@@ -1308,10 +1389,10 @@ function EventsPage({ events, onEvent }: { events: SecurityEvent[]; onEvent: (ev
     <section className="space-y-4">
       <div className="flex items-center justify-end">
         <button className="rounded-[43px] bg-[var(--bg-card)] px-4 py-2 text-sm text-[var(--text-secondary)]" onClick={exportJson}>
-          {copied ? "Copied JSON" : "Export JSON"}
+          {copied ? tr(locale, "Copied JSON", "已复制 JSON") : tr(locale, "Export JSON", "导出 JSON")}
         </button>
       </div>
-      <EventLog events={events} onEvent={onEvent} />
+      <EventLog events={events} onEvent={onEvent} locale={locale} />
     </section>
   );
 }
@@ -1320,10 +1401,12 @@ function RulesPage({
   guards,
   onSetGuardMode,
   setError,
+  locale,
 }: {
   guards: GuardInfo[];
   onSetGuardMode: (guardName: string, mode: string) => Promise<void>;
   setError: (error: string | null) => void;
+  locale: Locale;
 }) {
   const [busyPreset, setBusyPreset] = useState<GuardPreset | null>(null);
 
@@ -1349,8 +1432,8 @@ function RulesPage({
     <div className="space-y-5">
       <div className="qise-card flex flex-wrap items-center justify-between gap-4 p-4">
         <div>
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Global Presets</h3>
-          <p className="text-xs text-[var(--text-tertiary)]">Changing runtime modes requires the Qise bridge to be available.</p>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Global Presets", "全局预设")}</h3>
+          <p className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Changing runtime modes requires the Qise bridge to be available.", "切换运行模式需要 Qise 桥接服务可用。")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {(["balanced", "strict", "observe"] as GuardPreset[]).map((preset) => (
@@ -1358,16 +1441,21 @@ function RulesPage({
               key={preset}
               variant="secondary"
               busy={busyPreset === preset}
-              busyLabel="Applying..."
+              busyLabel={tr(locale, "Applying...", "正在应用...")}
               disabled={busyPreset !== null || guards.length === 0}
               onClick={() => applyPreset(preset)}
+              locale={locale}
             >
-              {preset}
+              {preset === "balanced"
+                ? tr(locale, "Balanced", "均衡")
+                : preset === "strict"
+                  ? tr(locale, "Strict", "严格")
+                  : modeLabel(locale, preset)}
             </BusyButton>
           ))}
         </div>
       </div>
-      <GuardList guards={guards} onSetMode={onSetGuardMode} />
+      <GuardList guards={guards} onSetMode={onSetGuardMode} locale={locale} />
     </div>
   );
 }
@@ -1378,12 +1466,14 @@ function SlmPage({
   onStartSlm,
   onStopSlm,
   onCheckSlm,
+  locale,
 }: {
   status: AppStatus | null;
   task: TaskState<string>;
   onStartSlm: (request: SlmStartRequest) => void;
   onStopSlm: (keepServer: boolean) => void;
   onCheckSlm: () => void;
+  locale: Locale;
 }) {
   const [model, setModel] = useState(status?.slm?.model || "qwen3:4b");
   const [baseUrl, setBaseUrl] = useState(status?.slm?.base_url || "http://localhost:11434/v1");
@@ -1399,70 +1489,71 @@ function SlmPage({
   return (
     <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
       <section className="qise-card p-5">
-        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Quick Setup</h3>
+        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Quick Setup", "快速设置")}</h3>
         <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-          SLM is optional. By default Qise will prepare local Ollama and pull the model if they are missing.
+          {tr(locale, "The local small model is optional. By default Qise will prepare Ollama and pull the model if they are missing.", "本地小模型是可选项。默认情况下，如果缺少 Ollama 或模型，Qise 会尝试准备它们。")}
         </p>
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Base URL</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Base URL", "基础地址")}</span>
             <input className="qise-input" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Model</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Model", "模型")}</span>
             <input className="qise-input" value={model} onChange={(event) => setModel(event.target.value)} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">API key</span>
-            <input className="qise-input" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Optional" />
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "API key", "接口密钥")}</span>
+            <input className="qise-input" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={tr(locale, "Optional", "可选")} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Timeout ms</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Timeout ms", "超时毫秒")}</span>
             <input className="qise-input" type="number" value={timeoutMs} onChange={(event) => setTimeoutMs(Number(event.target.value) || 10000)} />
           </label>
           <label className="qise-check">
             <input type="checkbox" checked={noInstall} onChange={(event) => setNoInstall(event.target.checked)} />
-            <span>Skip automatic Ollama install</span>
+            <span>{tr(locale, "Skip automatic Ollama install", "跳过自动安装 Ollama")}</span>
           </label>
           <label className="qise-check">
             <input type="checkbox" checked={noPull} onChange={(event) => setNoPull(event.target.checked)} />
-            <span>Skip automatic model pull</span>
+            <span>{tr(locale, "Skip automatic model pull", "跳过自动拉取模型")}</span>
           </label>
           <label className="qise-check">
             <input type="checkbox" checked={noVerify} onChange={(event) => setNoVerify(event.target.checked)} />
-            <span>Write config without verification</span>
+            <span>{tr(locale, "Write config without verification", "不验证直接写入配置")}</span>
           </label>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
           <BusyButton
             busy={busy && task.action === "start"}
-            busyLabel="Starting..."
+            busyLabel={tr(locale, "Starting...", "正在启动...")}
             disabled={busy}
             onClick={() => onStartSlm({ model, baseUrl, apiKey, timeoutMs, noInstall, noPull, noVerify })}
+            locale={locale}
           >
-            Start SLM
+            {tr(locale, "Start SLM", "启动小模型")}
           </BusyButton>
-          <BusyButton variant="secondary" busy={busy && task.action === "stop"} busyLabel="Stopping..." disabled={busy} onClick={() => onStopSlm(keepServer)}>
-            Stop SLM
+          <BusyButton locale={locale} variant="secondary" busy={busy && task.action === "stop"} busyLabel={tr(locale, "Stopping...", "正在停止...")} disabled={busy} onClick={() => onStopSlm(keepServer)}>
+            {tr(locale, "Stop SLM", "停止小模型")}
           </BusyButton>
-          <BusyButton variant="secondary" busy={busy && task.action === "status"} busyLabel="Checking..." disabled={busy} onClick={onCheckSlm}>
-            Check Status
+          <BusyButton locale={locale} variant="secondary" busy={busy && task.action === "status"} busyLabel={tr(locale, "Checking...", "正在检查...")} disabled={busy} onClick={onCheckSlm}>
+            {tr(locale, "Check Status", "检查状态")}
           </BusyButton>
         </div>
         <label className="qise-check mt-4">
           <input type="checkbox" checked={keepServer} onChange={(event) => setKeepServer(event.target.checked)} />
-          <span>Keep model server running when disabling Qise SLM</span>
+          <span>{tr(locale, "Keep model server running when disabling Qise SLM", "禁用 Qise 小模型时保持模型服务运行")}</span>
         </label>
       </section>
       <section className="qise-card p-5">
-        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Current State</h3>
+        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Current State", "当前状态")}</h3>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <MetricTile label="Verification" value={status?.slm?.verification || slmLabel(status)} tone={slmTone(status) === "ready" ? "green" : "yellow"} />
-          <MetricTile label="Provider" value={status?.slm?.provider || "none"} tone="blue" />
-          <MetricTile label="Model" value={status?.slm?.model || "not configured"} />
-          <MetricTile label="Server" value={status?.slm?.server_running ? "running" : "not running"} tone={status?.slm?.server_running ? "green" : "neutral"} />
+          <MetricTile label={tr(locale, "Verification", "验证")} value={slmStatusLabel(locale, status?.slm?.verification || slmLabel(status))} tone={slmTone(status) === "ready" ? "green" : "yellow"} />
+          <MetricTile label={tr(locale, "Provider", "提供方")} value={status?.slm?.provider || statusWord(locale, "none")} tone="blue" />
+          <MetricTile label={tr(locale, "Model", "模型")} value={status?.slm?.model || statusWord(locale, "not_configured")} />
+          <MetricTile label={tr(locale, "Server", "服务")} value={status?.slm?.server_running ? statusWord(locale, "running") : statusWord(locale, "not running")} tone={status?.slm?.server_running ? "green" : "neutral"} />
         </div>
-        {busy && <OperationPanel title={task.title} detail={task.detail || "This runs in the background; you can leave this page and return."} />}
+        {busy && <OperationPanel title={task.title} detail={task.detail || tr(locale, "This runs in the background; you can leave this page and return.", "该操作会在后台运行；你可以离开本页后再回来查看。")} />}
         {!busy && output && (
           <pre className={`mt-4 max-h-80 overflow-auto rounded-lg bg-[var(--bg-card)] p-4 text-xs ${task.status === "failed" ? "text-qise-red" : "text-[var(--text-secondary)]"}`}>
             {output}
@@ -1473,7 +1564,7 @@ function SlmPage({
   );
 }
 
-function ObserverPage({ events }: { events: SecurityEvent[] }) {
+function ObserverPage({ events, locale }: { events: SecurityEvent[]; locale: Locale }) {
   const [agent, setAgent] = useState("codex");
   const [command, setCommand] = useState("codex");
   const [cwd, setCwd] = useState("");
@@ -1490,37 +1581,37 @@ function ObserverPage({ events }: { events: SecurityEvent[] }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
       <section className="qise-card p-5">
-        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Command Builder</h3>
+        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Command Builder", "命令构建器")}</h3>
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Agent</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Agent", "智能体")}</span>
             <input className="qise-input" value={agent} onChange={(event) => setAgent(event.target.value)} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Command</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Command", "命令")}</span>
             <input className="qise-input" value={command} onChange={(event) => setCommand(event.target.value)} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Working directory</span>
-            <input className="qise-input" value={cwd} onChange={(event) => setCwd(event.target.value)} placeholder="Optional" />
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Working directory", "工作目录")}</span>
+            <input className="qise-input" value={cwd} onChange={(event) => setCwd(event.target.value)} placeholder={tr(locale, "Optional", "可选")} />
           </label>
         </div>
         <pre className="mt-4 rounded-lg bg-[var(--bg-card)] p-3 text-xs text-[var(--text-secondary)]">{generated}</pre>
         <button className="mt-4 rounded-[43px] bg-[var(--button-primary-bg)] px-4 py-2 text-sm text-white" onClick={copyCommand}>
-          {copied ? "Copied" : "Copy Command"}
+          {copied ? tr(locale, "Copied", "已复制") : tr(locale, "Copy Command", "复制命令")}
         </button>
       </section>
       <section className="qise-card p-5">
-        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Runtime Events</h3>
+        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Runtime Events", "运行时事件")}</h3>
         <div className="mt-4 space-y-2">
           {runtimeEvents.length === 0 ? (
-            <p className="rounded-lg bg-[var(--bg-card)] p-4 text-sm text-[var(--text-dim)]">No runtime events yet.</p>
+            <p className="rounded-lg bg-[var(--bg-card)] p-4 text-sm text-[var(--text-dim)]">{tr(locale, "No runtime events yet.", "暂无运行时事件。")}</p>
           ) : (
             runtimeEvents.map((event) => (
               <div key={event.id} className="rounded-lg bg-[var(--bg-card)] p-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-mono text-[var(--text-dim)]">{event.timestamp.slice(0, 19).replace("T", " ")}</span>
-                  <span className={badgeClass(eventVerdict(event))}>{eventVerdict(event)}</span>
+                  <span className={badgeClass(eventVerdict(event))}>{verdictLabel(locale, eventVerdict(event))}</span>
                 </div>
                 <p className="mt-2 text-sm text-[var(--text-secondary)]">{eventSummary(event)}</p>
               </div>
@@ -1532,7 +1623,7 @@ function ObserverPage({ events }: { events: SecurityEvent[] }) {
   );
 }
 
-function IntegrationsPage({ setError }: { setError: (error: string | null) => void }) {
+function IntegrationsPage({ setError, locale }: { setError: (error: string | null) => void; locale: Locale }) {
   const [adapter, setAdapter] = useState<(typeof ADAPTERS)[number]>("nanobot");
   const [snippet, setSnippet] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1561,7 +1652,7 @@ function IntegrationsPage({ setError }: { setError: (error: string | null) => vo
     <div className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr]">
       <section className="space-y-4">
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Adapters</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Adapters", "适配器")}</h3>
           <div className="mt-4 space-y-2">
             {ADAPTERS.map((item) => (
               <button
@@ -1578,7 +1669,7 @@ function IntegrationsPage({ setError }: { setError: (error: string | null) => vo
           </div>
         </div>
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Runtime Modes</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Runtime Modes", "运行模式")}</h3>
           <div className="mt-3 space-y-2 text-xs text-[var(--text-secondary)]">
             <code className="block rounded bg-[var(--bg-card)] p-2">qise proxy start --upstream https://api.openai.com/v1</code>
             <code className="block rounded bg-[var(--bg-card)] p-2">qise bridge start</code>
@@ -1589,27 +1680,27 @@ function IntegrationsPage({ setError }: { setError: (error: string | null) => vo
       <section className="qise-card p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Integration Snippet</h3>
-            <p className="text-xs text-[var(--text-tertiary)]">Generated from the product CLI.</p>
+            <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Integration Snippet", "集成片段")}</h3>
+            <p className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Generated from the product CLI.", "由产品命令行生成。")}</p>
           </div>
           <div className="flex gap-2">
-            <BusyButton variant="secondary" busy={busy} busyLabel="Loading..." onClick={() => loadSnippet()}>
-              Load
+            <BusyButton locale={locale} variant="secondary" busy={busy} busyLabel={tr(locale, "Loading...", "正在加载...")} onClick={() => loadSnippet()}>
+              {tr(locale, "Load", "加载")}
             </BusyButton>
             <button className="rounded-[43px] bg-[var(--bg-card)] px-3 py-1 text-xs text-[var(--text-secondary)] disabled:opacity-50" disabled={!snippet} onClick={copySnippet}>
-              {copied ? "Copied" : "Copy"}
+              {copied ? tr(locale, "Copied", "已复制") : tr(locale, "Copy", "复制")}
             </button>
           </div>
         </div>
         <pre className="max-h-[560px] overflow-auto rounded-lg bg-[var(--bg-card)] p-4 text-xs text-[var(--text-secondary)]">
-          {snippet || "Choose an adapter and load its snippet."}
+          {snippet || tr(locale, "Choose an adapter and load its snippet.", "选择适配器并加载集成片段。")}
         </pre>
       </section>
     </div>
   );
 }
 
-function AdvancedLabPage({ setError }: { setError: (error: string | null) => void }) {
+function AdvancedLabPage({ setError, locale }: { setError: (error: string | null) => void; locale: Locale }) {
   const [toolName, setToolName] = useState("bash");
   const [toolArgs, setToolArgs] = useState('{"command":"echo hello"}');
   const [pipeline, setPipeline] = useState<Pipeline>("egress");
@@ -1643,7 +1734,7 @@ function AdvancedLabPage({ setError }: { setError: (error: string | null) => voi
     try {
       if (toolArgs.trim()) JSON.parse(toolArgs);
       const value = await invoke<string>("get_context", { toolName, toolArgs });
-      setContext(value || "No context generated.");
+      setContext(value || tr(locale, "No context generated.", "没有生成上下文。"));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -1654,49 +1745,49 @@ function AdvancedLabPage({ setError }: { setError: (error: string | null) => voi
   return (
     <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
       <section className="qise-card p-5">
-        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Guard Input</h3>
+        <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Guard Input", "守卫输入")}</h3>
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Tool name</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Tool name", "工具名称")}</span>
             <input className="qise-input" value={toolName} onChange={(event) => setToolName(event.target.value)} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Tool args JSON</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Tool args JSON", "工具参数 JSON")}</span>
             <textarea className="qise-input min-h-32" value={toolArgs} onChange={(event) => setToolArgs(event.target.value)} />
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Pipeline</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Pipeline", "流水线")}</span>
             <select className="qise-input" value={pipeline} onChange={(event) => setPipeline(event.target.value as Pipeline)}>
-              <option value="ingress">ingress</option>
-              <option value="egress">egress</option>
-              <option value="output">output</option>
+              <option value="ingress">{pipelineLabel(locale, "ingress")}</option>
+              <option value="egress">{pipelineLabel(locale, "egress")}</option>
+              <option value="output">{pipelineLabel(locale, "output")}</option>
             </select>
           </label>
           <label className="block">
-            <span className="text-xs text-[var(--text-tertiary)]">Session ID</span>
-            <input className="qise-input" value={sessionId} onChange={(event) => setSessionId(event.target.value)} placeholder="Optional" />
+            <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Session ID", "会话编号")}</span>
+            <input className="qise-input" value={sessionId} onChange={(event) => setSessionId(event.target.value)} placeholder={tr(locale, "Optional", "可选")} />
           </label>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <BusyButton busy={busy === "check"} busyLabel="Checking..." disabled={busy !== null} onClick={runCheck}>
-            Run Check
+          <BusyButton locale={locale} busy={busy === "check"} busyLabel={tr(locale, "Checking...", "正在检查...")} disabled={busy !== null} onClick={runCheck}>
+            {tr(locale, "Run Check", "运行检查")}
           </BusyButton>
-          <BusyButton variant="secondary" busy={busy === "context"} busyLabel="Loading..." disabled={busy !== null} onClick={loadContext}>
-            Get Context
+          <BusyButton locale={locale} variant="secondary" busy={busy === "context"} busyLabel={tr(locale, "Loading...", "正在加载...")} disabled={busy !== null} onClick={loadContext}>
+            {tr(locale, "Get Context", "获取上下文")}
           </BusyButton>
         </div>
       </section>
       <section className="space-y-4">
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Check Result</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Check Result", "检查结果")}</h3>
           <pre className="mt-3 max-h-64 overflow-auto rounded-lg bg-[var(--bg-card)] p-4 text-xs text-[var(--text-secondary)]">
-            {result ? resultText(result) : "Run a check to see guard verdicts."}
+            {result ? resultText(result) : tr(locale, "Run a check to see guard verdicts.", "运行检查后查看守卫判定。")}
           </pre>
         </div>
         <div className="qise-card p-5">
-          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">Security Context</h3>
+          <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Security Context", "安全上下文")}</h3>
           <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--bg-card)] p-4 text-xs text-[var(--text-secondary)]">
-            {context || "Get context to preview injected guidance."}
+            {context || tr(locale, "Get context to preview injected guidance.", "获取上下文以预览注入指引。")}
           </pre>
         </div>
       </section>
@@ -1706,12 +1797,16 @@ function AdvancedLabPage({ setError }: { setError: (error: string | null) => voi
 
 function App() {
   const [activePage, setActivePage] = useState<PageId>("home");
+  const [locale, setLocale] = useState<Locale>(() => {
+    const stored = window.localStorage.getItem("qise-locale");
+    return stored === "zh" ? "zh" : "en";
+  });
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [guards, setGuards] = useState<GuardInfo[]>([]);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [bootHint, setBootHint] = useState("Starting Qise runtime...");
+  const [bootHintKey, setBootHintKey] = useState<"starting" | "checking" | "ready">("starting");
   const [lastError, setLastError] = useState<string | null>(null);
   const [detectingAgents, setDetectingAgents] = useState(false);
   const [stoppingProtection, setStoppingProtection] = useState(false);
@@ -1719,6 +1814,19 @@ function App() {
   const [shieldTask, setShieldTask] = useState<TaskState<string>>(() => createTask("Agent Shield"));
   const [slmTask, setSlmTask] = useState<TaskState<string>>(() => createTask("Local SLM"));
   const statusInFlight = useRef(false);
+  const bootHint = {
+    starting: tr(locale, "Starting Qise runtime...", "正在启动 Qise 运行时..."),
+    checking: tr(locale, "Still checking Qise. You can use the app while diagnostics finish.", "仍在检查 Qise。诊断完成前你也可以继续使用应用。"),
+    ready: tr(locale, "Qise is ready.", "Qise 已就绪。"),
+  }[bootHintKey];
+
+  useEffect(() => {
+    window.localStorage.setItem("qise-locale", locale);
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    setPreflightTask((task) => task.status === "idle" ? createTask(tr(locale, "Preflight Scan", "上线前扫描")) : task);
+    setShieldTask((task) => task.status === "idle" ? createTask(tr(locale, "Agent Shield", "智能体防护")) : task);
+    setSlmTask((task) => task.status === "idle" ? createTask(tr(locale, "Local SLM", "本地小模型")) : task);
+  }, [locale]);
 
   const loadStatus = useCallback(async () => {
     if (statusInFlight.current) return;
@@ -1734,7 +1842,7 @@ function App() {
       setLastError(String(e));
     } finally {
       statusInFlight.current = false;
-      setBootHint("Qise is ready.");
+      setBootHintKey("ready");
       setLoading(false);
     }
   }, []);
@@ -1759,7 +1867,7 @@ function App() {
 
   useEffect(() => {
     const bootTimer = setTimeout(() => {
-      setBootHint("Still checking Qise. You can use the app while diagnostics finish.");
+      setBootHintKey("checking");
       setLoading(false);
     }, 3500);
 
@@ -1836,13 +1944,13 @@ function App() {
 
   function runPreflightScan(request: PreflightRequest) {
     const title = request.mode === "all"
-      ? "Scanning selected Agents"
+      ? tr(locale, "Scanning selected agents", "正在扫描所选智能体")
       : request.mode === "agent"
-        ? `Scanning ${request.agent}`
-        : `Scanning ${request.mode}`;
+        ? tr(locale, `Scanning ${request.agent}`, `正在扫描 ${request.agent}`)
+        : tr(locale, `Scanning ${request.mode}`, `正在扫描${request.mode === "skill" ? "技能" : request.mode === "mcp" ? "协议服务" : "智能体配置"}`);
     const task = runningTask<ScanResult>(
       title,
-      "Collecting Agent config, Skills and MCP evidence through the Qise CLI.",
+      tr(locale, "Collecting agent config, skills and MCP evidence through the Qise CLI.", "正在通过 Qise 命令行收集智能体配置、技能与协议服务证据。"),
       "scan",
     );
     setPreflightTask(task);
@@ -1870,7 +1978,7 @@ function App() {
               : request.mode === "mcp"
                 ? await invoke<ScanReport>("scan_mcp", { path: request.path })
                 : await invoke<ScanReport>("scan_agent_config", { agent: request.agent });
-        setPreflightTask(succeededTask(task, result, "Scan finished. Results are preserved here until the next scan."));
+        setPreflightTask(succeededTask(task, result, tr(locale, "Scan finished. Results are preserved here until the next scan.", "扫描完成。结果会保留到下一次扫描。")));
         await loadEvents();
       } catch (e) {
         const failed = failedTask(task, e);
@@ -1887,7 +1995,7 @@ function App() {
     void (async () => {
       try {
         const output = await operation();
-        setShieldTask(succeededTask(task, output, "Operation finished. You can review the output below."));
+        setShieldTask(succeededTask(task, output, tr(locale, "Operation finished. You can review the output below.", "操作完成。你可以在下方查看输出。")));
         await refreshAll();
       } catch (e) {
         const failed = failedTask(task, e);
@@ -1900,8 +2008,8 @@ function App() {
   function protectAgent(agent: AgentInfo) {
     runShieldAction(
       `protect:${agent.key}`,
-      `Protecting ${agent.name}`,
-      "Patching Agent config and starting Qise managed services.",
+      tr(locale, `Protecting ${agent.name}`, `正在保护 ${agent.name}`),
+      tr(locale, "Patching agent config and starting Qise managed services.", "正在修改智能体配置并启动 Qise 管理的服务。"),
       async () => {
         const result = await invoke<CommandText>("protect_agent_with_options", {
           agent: agent.key,
@@ -1916,25 +2024,25 @@ function App() {
   function restoreAgentTask(agent: AgentInfo) {
     runShieldAction(
       `restore:${agent.key}`,
-      `Restoring ${agent.name}`,
-      "Restoring the Agent config from the latest Qise backup.",
+      tr(locale, `Restoring ${agent.name}`, `正在恢复 ${agent.name}`),
+      tr(locale, "Restoring the agent config from the latest Qise backup.", "正在从最新 Qise 备份恢复智能体配置。"),
       async () => {
         await invoke("restore_agent", { agent: agent.key });
-        return `${agent.name} config restored.`;
+        return tr(locale, `${agent.name} config restored.`, `${agent.name} 配置已恢复。`);
       },
     );
   }
 
   function restoreAllAgentsTask() {
-    if (!window.confirm("Restore all Agent configs modified by Qise?")) return;
-    runShieldAction("restore-all", "Restoring all Agents", "Restoring all configs modified by Qise.", async () => {
+    if (!window.confirm(tr(locale, "Restore all agent configs modified by Qise?", "恢复所有被 Qise 修改过的智能体配置？"))) return;
+    runShieldAction("restore-all", tr(locale, "Restoring all agents", "正在恢复全部智能体"), tr(locale, "Restoring all configs modified by Qise.", "正在恢复全部由 Qise 修改过的配置。"), async () => {
       const result = await invoke<CommandText>("restore_all_agents");
       return requireCommandSuccess(result);
     });
   }
 
   function stopServicesTask() {
-    runShieldAction("stop", "Stopping Qise services", "Stopping Qise managed proxy/bridge services.", async () => {
+    runShieldAction("stop", tr(locale, "Stopping Qise services", "正在停止 Qise 服务"), tr(locale, "Stopping Qise managed proxy and bridge services.", "正在停止 Qise 管理的代理与桥接服务。"), async () => {
       const result = await invoke<CommandText>("stop_qise_services");
       return requireCommandSuccess(result);
     });
@@ -1942,10 +2050,10 @@ function App() {
 
   function protectCustomAgentTask(baseUrl: string) {
     if (!baseUrl.trim()) {
-      setLastError("Custom Agent requires an upstream base URL.");
+      setLastError(tr(locale, "Custom agent requires an upstream base URL.", "自定义智能体需要上游基础地址。"));
       return;
     }
-    runShieldAction("protect:custom", "Protecting custom Agent", "Starting Qise proxy for the custom upstream.", async () => {
+    runShieldAction("protect:custom", tr(locale, "Protecting custom agent", "正在保护自定义智能体"), tr(locale, "Starting Qise proxy for the custom upstream.", "正在为自定义上游启动 Qise 代理。"), async () => {
       const result = await invoke<CommandText>("protect_agent_with_options", {
         agent: "custom",
         baseUrl,
@@ -1962,7 +2070,7 @@ function App() {
     void (async () => {
       try {
         const output = await operation();
-        setSlmTask(succeededTask(task, output, "SLM operation finished. Output is preserved here."));
+        setSlmTask(succeededTask(task, output, tr(locale, "SLM operation finished. Output is preserved here.", "小模型操作完成。输出会保留在这里。")));
         await refreshAll();
       } catch (e) {
         const failed = failedTask(task, e);
@@ -1973,21 +2081,21 @@ function App() {
   }
 
   function startSlmTask(request: SlmStartRequest) {
-    runSlmAction("start", "Starting Local SLM", "Configuring the SLM layer through the Qise CLI.", async () => {
+    runSlmAction("start", tr(locale, "Starting Local SLM", "正在启动本地小模型"), tr(locale, "Configuring the SLM layer through the Qise CLI.", "正在通过 Qise 命令行配置小模型层。"), async () => {
       const result = await invoke<CommandText>("slm_start", { ...request });
       return requireCommandSuccess(result);
     });
   }
 
   function stopSlmTask(keepServer: boolean) {
-    runSlmAction("stop", "Stopping Local SLM", "Disabling Qise SLM config.", async () => {
+    runSlmAction("stop", tr(locale, "Stopping Local SLM", "正在停止本地小模型"), tr(locale, "Disabling Qise SLM config.", "正在禁用 Qise 小模型配置。"), async () => {
       const result = await invoke<CommandText>("slm_stop", { keepServer });
       return requireCommandSuccess(result);
     });
   }
 
   function checkSlmTask() {
-    runSlmAction("status", "Checking Local SLM", "Reading SLM status from the Qise CLI.", async () => {
+    runSlmAction("status", tr(locale, "Checking Local SLM", "正在检查本地小模型"), tr(locale, "Reading SLM status from the Qise CLI.", "正在从 Qise 命令行读取小模型状态。"), async () => {
       const result = await invoke<unknown>("get_slm_status");
       return resultText(result);
     });
@@ -1996,25 +2104,31 @@ function App() {
   const pageTitleRight = useMemo(() => {
     if (activePage === "shield" && statusProtectionEnabled(status)) {
       return (
-        <BusyButton variant="secondary" busy={stoppingProtection} busyLabel="Stopping..." onClick={stopProtection}>
-          Stop Protection
+        <BusyButton locale={locale} variant="secondary" busy={stoppingProtection} busyLabel={tr(locale, "Stopping...", "正在停止...")} onClick={stopProtection}>
+          {tr(locale, "Stop Protection", "停止保护")}
         </BusyButton>
       );
     }
     return null;
-  }, [activePage, status, stoppingProtection]);
+  }, [activePage, locale, status, stoppingProtection]);
 
   if (loading) {
-    return <BootScreen hint={bootHint} />;
+    return <BootScreen hint={bootHint} locale={locale} />;
   }
 
   return (
     <div className="min-h-screen bg-qise-deep px-5 pb-16 pt-5">
       <div className="mx-auto max-w-7xl">
-        <TopBar activePage={activePage} status={status} onOpen={setActivePage} />
-        <ErrorBanner error={lastError} onDismiss={() => setLastError(null)} />
-        <TaskStrip tasks={[preflightTask, shieldTask, slmTask]} />
-        <PageHeader page={activePage} onHome={() => setActivePage("home")} right={pageTitleRight} />
+        <TopBar
+          activePage={activePage}
+          status={status}
+          onOpen={setActivePage}
+          locale={locale}
+          onToggleLocale={() => setLocale((current) => current === "en" ? "zh" : "en")}
+        />
+        <ErrorBanner error={lastError} onDismiss={() => setLastError(null)} locale={locale} />
+        <TaskStrip tasks={[preflightTask, shieldTask, slmTask]} locale={locale} />
+        <PageHeader page={activePage} onHome={() => setActivePage("home")} right={pageTitleRight} locale={locale} />
 
         {activePage === "home" && (
           <HomePage
@@ -2024,6 +2138,7 @@ function App() {
             onOpen={setActivePage}
             onDetectAgents={detectAgentsNow}
             detectingAgents={detectingAgents}
+            locale={locale}
           />
         )}
         {activePage === "shield" && (
@@ -2035,26 +2150,27 @@ function App() {
             onRestoreAll={restoreAllAgentsTask}
             onStopServices={stopServicesTask}
             onProtectCustom={protectCustomAgentTask}
+            locale={locale}
           />
         )}
         {activePage === "preflight" && (
-          <PreflightPage agents={agents} setError={setLastError} task={preflightTask} onRunScan={runPreflightScan} />
+          <PreflightPage agents={agents} setError={setLastError} task={preflightTask} onRunScan={runPreflightScan} locale={locale} />
         )}
-        {activePage === "events" && <EventsPage events={events} onEvent={handleEvent} />}
+        {activePage === "events" && <EventsPage events={events} onEvent={handleEvent} locale={locale} />}
         {activePage === "rules" && (
-          <RulesPage guards={guards} onSetGuardMode={handleSetGuardMode} setError={setLastError} />
+          <RulesPage guards={guards} onSetGuardMode={handleSetGuardMode} setError={setLastError} locale={locale} />
         )}
         {activePage === "slm" && (
-          <SlmPage status={status} task={slmTask} onStartSlm={startSlmTask} onStopSlm={stopSlmTask} onCheckSlm={checkSlmTask} />
+          <SlmPage status={status} task={slmTask} onStartSlm={startSlmTask} onStopSlm={stopSlmTask} onCheckSlm={checkSlmTask} locale={locale} />
         )}
-        {activePage === "doctor" && <DiagnosticsPanel />}
-        {activePage === "observer" && <ObserverPage events={events} />}
-        {activePage === "backup" && <BackupRestorePage status={status} onRefresh={refreshAll} setError={setLastError} />}
-        {activePage === "integrations" && <IntegrationsPage setError={setLastError} />}
-        {activePage === "advanced" && <AdvancedLabPage setError={setLastError} />}
-        {activePage === "settings" && <ConfigPanel />}
+        {activePage === "doctor" && <DiagnosticsPanel locale={locale} />}
+        {activePage === "observer" && <ObserverPage events={events} locale={locale} />}
+        {activePage === "backup" && <BackupRestorePage status={status} onRefresh={refreshAll} setError={setLastError} locale={locale} />}
+        {activePage === "integrations" && <IntegrationsPage setError={setLastError} locale={locale} />}
+        {activePage === "advanced" && <AdvancedLabPage setError={setLastError} locale={locale} />}
+        {activePage === "settings" && <ConfigPanel locale={locale} />}
       </div>
-      <StatusFooter status={status} />
+      <StatusFooter status={status} locale={locale} />
     </div>
   );
 }

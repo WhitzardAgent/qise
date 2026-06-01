@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { makeRealtimeEvent } from "../lib/api";
 import type { EventEvidence, SecurityEvent } from "../lib/api";
+import { tr, verdictLabel, type Locale } from "../lib/locale";
 
 interface EventLogProps {
   events: SecurityEvent[];
   onEvent: (event: SecurityEvent) => void;
+  locale: Locale;
 }
 
 type EventFilter = "all" | "blocked" | "warnings";
@@ -46,8 +48,13 @@ function eventGuardName(event: SecurityEvent): string {
   return event.evidence.find((item) => item.guard)?.guard || event.action.name || event.risk.category || event.source;
 }
 
-export default function EventLog({ events, onEvent }: EventLogProps) {
+export default function EventLog({ events, onEvent, locale }: EventLogProps) {
   const [filter, setFilter] = useState<EventFilter>("all");
+  const filterLabels: Record<EventFilter, string> = {
+    all: tr(locale, "All", "全部"),
+    blocked: tr(locale, "Blocked", "已拦截"),
+    warnings: tr(locale, "Warnings", "告警"),
+  };
 
   // Listen for real-time guard events from Tauri backend
   useEffect(() => {
@@ -70,8 +77,8 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
   if (events.length === 0) {
     return (
       <div className="qise-card p-6 shadow-double-ring text-center">
-        <p className="text-sm text-[#6a6b6c]">
-          No security events yet. Enable protection to start monitoring.
+        <p className="text-sm text-[var(--text-tertiary)]">
+          {tr(locale, "No security events yet. Enable protection to start monitoring.", "暂无安全事件。启用保护后即可开始监控。")}
         </p>
       </div>
     );
@@ -87,11 +94,11 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
             onClick={() => setFilter(f)}
             className={`px-4 py-1 rounded-[43px] text-xs font-medium transition-all ${
               filter === f
-                ? "bg-[hsla(0,0%,100%,0.815)] text-[#07080a]"
-                : "bg-[#1b1c1e] text-[#9c9c9d] hover:text-[#cecece]"
+                ? "bg-[var(--bg-hover)] text-[var(--text-primary)]"
+                : "bg-[var(--bg-card)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
             }`}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {filterLabels[f]}
             {f === "all" && ` (${events.length})`}
             {f === "blocked" && ` (${events.filter((e) => eventVerdict(e).toLowerCase() === "block").length})`}
             {f === "warnings" && ` (${events.filter((e) => eventVerdict(e).toLowerCase() === "warn").length})`}
@@ -101,8 +108,8 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
 
       <div className="qise-card p-4 shadow-double-ring space-y-2">
         {filteredEvents.length === 0 ? (
-          <p className="text-sm text-[#6a6b6c] text-center py-4">
-            No {filter} events
+          <p className="text-sm text-[var(--text-tertiary)] text-center py-4">
+            {tr(locale, `No ${filterLabels[filter].toLowerCase()} events`, `暂无${filterLabels[filter]}事件`)}
           </p>
         ) : (
           filteredEvents.map((event, i) => (
@@ -110,20 +117,20 @@ export default function EventLog({ events, onEvent }: EventLogProps) {
               key={i}
               className={`flex items-center gap-3 py-2 px-3 rounded-lg animate-fade-in ${
                 eventVerdict(event).toLowerCase() === "block"
-                  ? "border-l-2 border-[#FF6363]"
+                  ? "border-l-2 border-[var(--qise-red)]"
                   : ""
               }`}
             >
-              <span className="text-xs font-mono text-[#6a6b6c]">
+              <span className="text-xs font-mono text-[var(--text-dim)]">
                 {event.timestamp.replace("T", " ").slice(0, 19)}
               </span>
-              <span className="text-xs font-mono text-[#9c9c9d]">
+              <span className="text-xs font-mono text-[var(--text-tertiary)]">
                 {eventGuardName(event)}
               </span>
               <span className={verdictBadgeClass(eventVerdict(event))}>
-                {eventVerdict(event)}
+                {verdictLabel(locale, eventVerdict(event))}
               </span>
-              <span className="text-sm text-[#cecece] truncate">
+              <span className="text-sm text-[var(--text-secondary)] truncate">
                 {event.evidence.length > 0 ? evidenceText(event.evidence[0]) : eventMessage(event)}
               </span>
             </div>
