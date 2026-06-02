@@ -11,7 +11,7 @@
 Recommended before the first PyPI release:
 
 ```bash
-git clone https://github.com/opq-qise/qise.git
+git clone https://github.com/WhitzardAgent/qise.git
 cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate

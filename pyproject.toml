@@ -43,10 +43,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/opq-qise/qise"
-Documentation = "https://github.com/opq-qise/qise/tree/main/docs"
-Repository = "https://github.com/opq-qise/qise"
-Issues = "https://github.com/opq-qise/qise/issues"
+Homepage = "https://github.com/WhitzardAgent/qise"
+Documentation = "https://github.com/WhitzardAgent/qise/tree/main/docs"
+Repository = "https://github.com/WhitzardAgent/qise"
+Issues = "https://github.com/WhitzardAgent/qise/issues"
 
 [project.optional-dependencies]
 dev = [

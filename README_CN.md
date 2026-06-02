@@ -4,19 +4,33 @@
 
 **给 AI 编程 Agent 使用的本地优先安全层。**
 
-Qise 可以帮助你在使用 Codex、OpenClaw、Claude Code 以及自定义 Agent 时，增加一层本地安全防护：扫描集成、把模型流量接入本地 Guard Proxy、拦截高风险动作，并留下可解释的安全事件记录。
+Qise 可以帮助你在使用 Codex、OpenClaw、Claude Code 以及自定义 Agent 时，增加一层本地安全防护：扫描高风险集成、把模型流量接入本地 Guard Proxy、拦截危险动作，并留下可读的本地安全事件记录。
 
 [English](./README.md) | [快速开始](./docs/quickstart.md) | [安装](./docs/install.md) | [架构](./docs/architecture.md) | [隐私](./docs/privacy.md)
 
 </div>
 
+> [!IMPORTANT]
+> 本项目仍处于活跃开发阶段，可能包含尚未发现的缺陷。欢迎通过 Issue 和 PR 提交反馈与贡献。
 ---
 
-## Qise 是什么
+## 从这里开始
 
-AI 编程 Agent 可以读文件、执行 shell 命令、调用 MCP server、安装 skill、使用 memory，并把数据发送给模型 API。这些能力很有用，但也带来了新的安全边界：被投毒的工具描述、恶意 skill、提示注入、不安全命令或意外密钥泄露，都可能造成真实的本地风险。
+Qise 有三个入口：
 
-Qise 是为这个边界设计的轻量本地安全层。它不是模型服务商，也不会替代你正在使用的 Agent。它运行在你的机器上，作为现有 Agent 的旁路防护。
+| 你是 | 建议从哪里开始 | 原因 |
+| --- | --- | --- |
+| 普通 Agent 用户 | 桌面应用 | 不需要记命令，就可以检测 Agent、开启保护、扫描配置、查看事件。 |
+| 终端/CLI 用户 | `qise` CLI | 可以扫描、保护 Agent、查看事件，并把检查流程写进脚本。 |
+| Agent 开发者 | SDK / adapters | 可以把 Qise 检查接入 LangGraph、OpenAI Agents SDK、Nanobot、Hermes 或 NexAU。 |
+
+桌面应用和 CLI 使用同一套 Python Qise 产品引擎。UI 不是另一套实现，所以 CLI 和 UI 的保护行为会保持一致。
+
+## Qise 能做什么
+
+AI 编程 Agent 可以读文件、执行 shell 命令、调用 MCP server、安装 skill、使用 memory，并把数据发送给模型 API。这些能力很有用，但也带来了新的本地安全边界：被投毒的工具描述、恶意 skill、提示注入、不安全命令或意外密钥泄露，都可能造成真实的本机风险。
+
+Qise 运行在你的机器上，作为现有 Agent 的旁路防护。它不是模型服务商，也不会替代你正在使用的 Agent。
 
 在常用的 proxy 模式下，调用链是：
 
@@ -26,85 +40,148 @@ AI Agent -> Qise local proxy -> 你原本使用的模型 API
 
 Qise 可以：
 
-- 在工具调用到达系统前进行检查。
+- 检测 Codex、OpenClaw、Claude Code 等受支持 Agent。
+- 在修改 Agent 配置前自动备份。
+- 把 Agent 流量接入本地 Guard Proxy。
+- 在工具调用真正触达系统前进行检查。
 - 阻断危险命令，例如破坏性 shell 操作。
 - 对可疑文件、网络、凭据和数据外传行为发出警告或拦截。
 - 在信任 skill、MCP config、Agent config 前进行预检扫描。
 - 向 Agent/模型请求注入本地安全上下文。
-- 记录本地 JSONL 安全事件，包含证据和处置建议。
+- 记录本地 JSONL 安全事件，包含风险、证据、判定和建议。
 - 可选接入本地小模型，通过 Ollama 或其他 OpenAI-compatible endpoint 做第二层语义审查。
-- 同时提供 CLI 和桌面 UI，并复用同一个产品引擎。
 
 Qise 是 local-first 的。默认情况下，产品状态、备份和事件都保存在 `~/.qise/`。事件记录只保存紧凑证据片段，不保存完整模型流量。
 
-## 适合谁使用
-
-如果你有以下需求，可以使用 Qise：
-
-- 正在使用 AI 编程 Agent，希望在命令、文件、网络请求或工具调用真正触达本机前增加一道防线。
-- 会安装第三方 skill 或 MCP server，希望启用前先扫描。
-- 正在开发 Agent，希望把 Guard 接入 LangGraph、OpenAI Agents SDK 等框架。
-- 希望用桌面控制台查看防护状态、预检扫描、事件、Guard 模式、本地 SLM、备份和系统诊断。
-
 ## 当前状态
 
-Qise 目前处于 alpha/MVP 阶段。在 PyPI 发布前，推荐从源码安装。
+Qise 目前处于 alpha/MVP 阶段。macOS 桌面应用可以从源码构建打包。PyPI 发布、签名安装包和正式发布流程仍在完善中。
 
 | 模块 | 当前能力 | 状态 |
 | --- | --- | --- |
+| 桌面应用 | Tauri 2 + React UI，调用同一套 Qise CLI/产品引擎 | 源码构建 MVP |
 | CLI | `doctor`、`status`、`agents`、`scan`、`check`、`events`、`protect`、`restore`、`stop`、`slm`、`run` | MVP 可用 |
-| Proxy 防护 | 支持 OpenAI-compatible `/v1/chat/completions` 流量和 Anthropic `/v1/messages` 流量的本地 proxy | MVP 可用 |
+| Proxy 防护 | 支持 OpenAI-compatible `/v1/chat/completions` 和 Anthropic `/v1/messages` 的本地 proxy | MVP 可用 |
+| Claude Code | 原生 Anthropic Messages proxy，支持请求/响应解析、安全上下文注入和 streaming `tool_use` 检查 | MVP 可用 |
 | 预检扫描 | 扫描 skill、MCP config、Agent config 和自动检测到的 Agent 资产 | MVP 可用 |
-| Guard 引擎 | 14 个 Guard，覆盖 ingress、egress 和 output 三条流水线 | MVP 可用 |
+| Guard 引擎 | 14 类 Guard，覆盖 ingress、egress 和 output 三条流水线 | MVP 可用 |
 | 事件日志 | 本地 JSONL 事件，包含风险、证据、判定、建议和 correlation ID | MVP 可用 |
 | 本地 SLM | 通过 Ollama 或自定义 OpenAI-compatible endpoint 启用可选语义审查层 | MVP 可用 |
 | Runtime Observer | 用户态 wrapper，记录进程、stdout/stderr、文件 diff 和尽力解析的网络证据 | MVP |
-| 桌面应用 | Tauri 2 + React UI，调用同一套 Qise CLI | 源码构建 MVP |
-| Claude Code | 原生 Anthropic `/v1/messages` proxy，支持请求/响应解析、安全上下文注入和 streaming `tool_use` 检查 | MVP 可用 |
+| SDK/adapters | Nanobot、Hermes、NexAU、LangGraph 和 OpenAI Agents SDK 适配器 | 开发者 MVP |
 
-## 项目结构
+## 安装桌面应用
 
-仓库分为几层：
+桌面应用是作为产品试用 Qise 的最简单方式。它包含防护状态、Agent 检测、一键保护、预检扫描、事件日志、Guard 规则、本地 SLM、备份恢复、系统诊断和 SDK 片段等页面。
 
-```text
-src/qise/              Python 产品引擎、CLI、proxy、bridge、guards、adapters
-src/qise/guards/       Prompt、command、credential、filesystem、network、exfil 等 Guard
-src/qise/product/      面向用户的流程：protect、restore、scan、status、doctor、events、SLM
-src/qise/proxy/        OpenAI-compatible 与 Anthropic Messages 本地 proxy 和 streaming 支持
-src/qise/bridge/       桌面 UI/Guard 控制使用的本地 bridge
-src/qise/adapters/     SDK/框架集成片段和适配器
-src-ui/                React + TypeScript 桌面前端
-src-tauri/             Tauri 2 Rust 桌面外壳和 IPC 命令
-src-proxy/             Rust proxy 实验/运行时组件
-data/                  威胁模式、安全上下文、prompt 示例
-docs/                  更深入的安装、架构、隐私、事件和集成文档
-examples/              安全/危险示例 skill、MCP config 和 Agent 示例
-tests/                 Guard、proxy、CLI 和产品流程的 Python 测试
-```
+### 方式 A：安装预构建 macOS DMG
 
-一个重要设计点是：桌面应用没有另写一套安全引擎。它通过 Tauri IPC 调用同一个 Python `qise` CLI，因此 CLI 和 UI 的行为保持一致。
+当 GitHub Releases 中提供 DMG 后：
 
-## 环境要求
+1. 下载 macOS DMG，例如 `Qise_0.2.0_aarch64.dmg`。
+2. 双击打开 DMG。
+3. 把 `Qise.app` 拖到 `Applications`。
+4. 打开 `Qise.app`。
 
-CLI 需要：
+如果当前构建还没有经过 Apple 公证，macOS 首次打开可能会拦截。可以右键 `Qise.app`，选择 `打开`，然后确认；也可以在 `系统设置 -> 隐私与安全性` 中允许打开。
 
-- Python 3.11 或更新版本。
-- 当前 demo 脚本需要 macOS 或 Linux shell。
-- 只有在保护真实 Codex/OpenClaw/Claude Code/custom Agent 时，才需要真实 Agent 安装。
-
-从源码运行桌面应用还需要：
-
-- 上面的 CLI 环境。
-- Node.js 18 或更新版本。
-- Rust stable toolchain。
-- 只有构建打包版桌面运行时时，才需要 PyInstaller。
-
-## 从源码安装
+### 方式 B：从源码构建 macOS App
 
 在终端运行：
 
 ```bash
-git clone https://github.com/opq-qise/qise.git
+git clone https://github.com/WhitzardAgent/qise.git
+cd qise
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev,proxy]"
+python -m pip install pyinstaller
+npm --prefix src-ui install
+src-ui/node_modules/.bin/tauri build
+```
+
+每条命令的作用：
+
+| 命令 | 为什么运行它 |
+| --- | --- |
+| `git clone ...` | 下载 Qise 源代码。 |
+| `cd qise` | 进入项目目录。 |
+| `python3.11 -m venv .venv` | 创建一个隔离的 Python 环境。 |
+| `source .venv/bin/activate` | 让 `python` 和 `pip` 使用这个环境。 |
+| `pip install -e ".[dev,proxy]"` | 安装 Qise CLI/产品引擎，以及开发和 proxy 依赖。 |
+| `python -m pip install pyinstaller` | 安装用于把 Python Qise runtime 打进桌面应用的工具。 |
+| `npm --prefix src-ui install` | 安装 React、Vite、TypeScript 和 Tauri 前端依赖。 |
+| `src-ui/node_modules/.bin/tauri build` | 构建内置 Qise runtime、React UI、`.app` 和 `.dmg`。 |
+
+构建成功后，重点看这两个文件：
+
+```text
+src-tauri/target/release/bundle/macos/Qise.app
+src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg
+```
+
+DMG 文件名中的版本号和 CPU 架构可能会变化。Apple Silicon 上通常是 `aarch64`。
+
+安装本地构建版：
+
+1. 打开 `src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg`。
+2. 把 `Qise.app` 拖进 `Applications`。
+3. 打开 `Qise.app`。
+
+构建过程还会生成内置 CLI runtime：
+
+```text
+src-tauri/resources/bin/qise
+```
+
+这个二进制文件是构建产物，不应该提交到 Git。
+
+### 以开发模式运行桌面应用
+
+适合你正在修改 UI 或快速测试时使用：
+
+```bash
+source .venv/bin/activate
+npm --prefix src-ui install
+src-ui/node_modules/.bin/tauri dev
+```
+
+## 第一次使用桌面应用
+
+1. 打开 `Qise.app`。
+2. 在首页点击 `Detect Agents`。
+3. 进入 `Agent Shield`。
+4. 选择 Codex、OpenClaw 或 Claude Code 等 Agent。
+5. 检查上游模型 API 地址。
+6. 点击 `Protect`。
+7. 像平时一样使用你的 Agent。
+8. 回到 Qise，打开 `Security Events` 查看告警和拦截记录。
+
+如果保护 Claude Code，请确认 Anthropic key 在环境中可用：
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Claude Code 的上游地址通常是：
+
+```text
+https://api.anthropic.com
+```
+
+如果要撤销 Qise 修改，可以在桌面应用里使用 `Backup & Restore` 或 `Agent Shield`。也可以用 CLI：
+
+```bash
+qise restore all
+qise stop
+```
+
+## 从源码安装 CLI
+
+如果你更喜欢终端，可以把 Qise 安装成 Python 包：
+
+```bash
+git clone https://github.com/WhitzardAgent/qise.git
 cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate
@@ -116,37 +193,28 @@ qise doctor
 
 | 命令 | 为什么运行它 |
 | --- | --- |
-| `git clone ...` | 下载 Qise 源代码。 |
+| `git clone ...` | 下载仓库。 |
 | `cd qise` | 进入项目目录。 |
-| `python3.11 -m venv .venv` | 创建一个隔离的 Python 环境。 |
-| `source .venv/bin/activate` | 激活环境，让 `python` 和 `pip` 使用这个环境。 |
+| `python3.11 -m venv .venv` | 创建一个干净的 Python 环境。 |
+| `source .venv/bin/activate` | 激活这个环境。 |
 | `pip install -e ".[proxy]"` | 以 editable 模式安装 Qise，并安装 proxy 运行时依赖。 |
 | `qise doctor` | 检查 Python、Qise import、配置、本地端口、事件日志、可选 SLM 和已检测 Agent。 |
 
-如果要开发和跑测试，安装 dev extra：
+如果要开发和跑测试：
 
 ```bash
 pip install -e ".[dev,proxy]"
 ```
 
-## 第一次安全 Demo
+## 第一次安全 CLI Demo
 
-第一次使用建议从这里开始。这个 demo 使用临时目录，不会触碰你真实的 Codex 配置。
+这个 demo 使用临时目录，不会触碰你真实的 Codex 配置：
 
 ```bash
 bash ./scripts/demo_mvp.sh
 ```
 
-这个 demo 会执行：
-
-| 步骤 | 发生什么 |
-| --- | --- |
-| Doctor | 运行准备状态检查。 |
-| Protect fake Codex | 创建并 patch 一个临时 Codex 配置。 |
-| Status | 显示 Qise 服务、受保护 Agent、事件路径和 SLM 状态。 |
-| Dangerous check | 运行 `qise check bash '{"command":"rm -rf /"}'`，预期 Qise 会阻断。 |
-| Events | 打印解释这次阻断的本地安全事件。 |
-| Restore | 恢复临时 fake Codex 配置。 |
+它会运行准备状态检查、保护一个 fake Codex 配置、阻断危险命令、打印事件，并恢复临时配置。
 
 也可以运行预检扫描 demo：
 
@@ -195,14 +263,14 @@ qise events --limit 10 --json
 qise scan mcp examples/mcp-dangerous.json --json || true
 ```
 
-## 保护真实 Agent
+## 用 CLI 保护真实 Agent
 
 保护的意思是：Qise 会备份你的 Agent 配置，把 Agent 的模型 base URL patch 到本地 Qise proxy，启动 Qise 管理的服务，并记录备份路径，方便之后恢复。
 
 保护真实 Agent 前，请确认：
 
 - 你的 Agent 在不接入 Qise 时已经可以正常工作。
-- 模型服务商 API key 仍然存在于 Agent 使用的环境里，例如 OpenAI-compatible Agent 使用 `OPENAI_API_KEY`，Claude Code 使用 `ANTHROPIC_API_KEY`。
+- 模型服务商 API key 仍然存在于 Agent 使用的环境里。
 - 如果 Qise 无法从 Agent 配置中推断模型 API base URL，你知道上游模型 API 地址。
 
 保护 Codex：
@@ -213,15 +281,7 @@ qise status
 qise events --limit 10
 ```
 
-会发生什么：
-
-| 命令 | 做什么 |
-| --- | --- |
-| `qise protect codex` | 定位 Codex 配置，尽量推断原始上游 API，在 `~/.qise/backups/codex/...` 创建备份，把 Codex patch 到 Qise proxy，并启动 proxy/bridge 服务。 |
-| `qise status` | 确认哪些 Agent 处于保护状态，以及备份、配置、事件文件在哪里。 |
-| `qise events --limit 10` | 查看 scan、proxy、CLI check 或 Runtime Observer 产生的最近拦截/告警。 |
-
-如果 Qise 无法推断上游服务商，手动传入：
+如果 Qise 无法推断上游服务商：
 
 ```bash
 qise protect codex --base-url https://api.openai.com/v1
@@ -241,11 +301,11 @@ qise protect claude-code --base-url https://api.anthropic.com
 qise status
 ```
 
-会发生什么：
+Claude Code 相关命令的作用：
 
 | 命令 | 做什么 |
 | --- | --- |
-| `export ANTHROPIC_API_KEY=...` | 让 Claude Code 和 Qise 管理的 proxy 进程都能读取你的 Anthropic key。如果你已经使用 `apiKeyHelper`，可以继续使用；Qise 也会保留 Claude Code 请求里带来的 key。 |
+| `export ANTHROPIC_API_KEY=...` | 让 Claude Code 和 Qise 管理的 proxy 进程都能读取你的 Anthropic key。 |
 | `qise protect claude-code --base-url https://api.anthropic.com` | 备份 `~/.claude/settings.json`，把 `env.ANTHROPIC_BASE_URL` 设置为本地 Qise proxy，记录原始 Anthropic upstream，并启动 Qise 服务。 |
 | `qise status` | 确认 Claude Code 已受保护，并查看备份路径。 |
 
@@ -268,14 +328,6 @@ qise restore codex
 qise restore all
 qise stop
 ```
-
-| 命令 | 做什么 |
-| --- | --- |
-| `qise restore codex` | 从 Qise 备份记录恢复 Codex 配置。 |
-| `qise restore all` | 恢复所有当前记录为被 Qise 保护过的 Agent。 |
-| `qise stop` | 停止 Qise 管理的 proxy 和 bridge 后台服务。 |
-
-恢复后，Qise 仍会把备份保留在 `~/.qise/backups/`，方便你检查前后差异。
 
 ## CLI 命令地图
 
@@ -366,12 +418,6 @@ qise slm start --base-url http://localhost:8000/v1 --model my-security-model
 qise slm stop
 ```
 
-禁用 Qise SLM 配置，但保持模型服务运行：
-
-```bash
-qise slm stop --keep-server
-```
-
 如果 Qise proxy/protection 已经在运行，修改 SLM 状态后需要重新启动防护：
 
 ```bash
@@ -379,79 +425,11 @@ qise stop
 qise protect codex
 ```
 
-## Runtime Observer
-
-Runtime Observer 是轻量用户态 wrapper。它会记录运行的命令、进程证据、stdout/stderr 摘要、工作目录文件变化、尽力解析的网络 endpoint，以及可把 runtime/proxy 证据串起来的 `correlation_id`。
-
-示例：
-
-```bash
-qise run --agent codex -- codex
-qise events --stage runtime --limit 10
-```
-
-指定工作目录：
-
-```bash
-qise run --agent codex --cwd /path/to/project -- codex
-```
-
-它不是内核级审计，而是用较低配置成本提供有用的本地运行证据。
-
-## 桌面应用
-
-桌面应用是 Tauri 2 + React + TypeScript，对同一套 Qise CLI 做可视化封装。
-
-它包含这些页面：
-
-- Home status 和已检测 Agent。
-- Agent Shield：保护、恢复和停止 Qise 服务。
-- Preflight Scan：扫描全部 Agent、单个 Agent、skill 路径、MCP config 或 Agent config。
-- Security Events：查看最近本地事件。
-- Protection Rules：在 bridge 运行时查看和调整 Guard 模式。
-- Local SLM：启动、停止和检查可选模型层。
-- System Doctor：可视化运行准备状态诊断。
-- Runtime Observer：生成 `qise run` 命令并查看 runtime 事件。
-- Backup & Restore：查看备份位置并恢复修改过的配置。
-- Integrations：加载 Nanobot、Hermes、NexAU、LangGraph 和 OpenAI Agents SDK 的 adapter 片段。
-- Settings 和 Advanced Lab：编辑配置，并手动运行 Guard/context 检查。
-
-以开发模式运行桌面应用：
-
-```bash
-pip install -e ".[dev,proxy]"
-npm --prefix src-ui install
-src-ui/node_modules/.bin/tauri dev
-```
-
-每条命令的作用：
-
-| 命令 | 为什么运行它 |
-| --- | --- |
-| `pip install -e ".[dev,proxy]"` | 让桌面 shell 可以调用 Python `qise` CLI，并安装开发/测试依赖。 |
-| `npm --prefix src-ui install` | 安装 React、Vite、TypeScript、Tailwind 和 Tauri CLI 前端依赖。 |
-| `src-ui/node_modules/.bin/tauri dev` | 启动 Tauri 桌面外壳；配置里的 `beforeDevCommand` 会启动 Vite UI server。 |
-
-从源码构建打包版桌面应用：
-
-```bash
-pip install -e ".[dev,proxy]"
-python -m pip install pyinstaller
-npm --prefix src-ui install
-src-ui/node_modules/.bin/tauri build
-```
-
-Tauri build 会运行 `scripts/build-desktop-runtime.sh`，把 Python Qise runtime 打包到 `src-tauri/resources/bin/qise`，然后构建 React 前端和桌面安装包。
-
-如果你已经有独立的 Qise binary，可以让桌面应用使用它：
-
-```bash
-export QISE_BINARY=/path/to/qise
-```
-
 ## SDK 和框架适配器
 
-Qise 也可以接入 Agent 框架内部。打印集成片段：
+Qise 也可以接入 Agent 框架内部。这部分主要面向正在开发 Agent 或工具的开发者。
+
+打印集成片段：
 
 ```bash
 qise adapters
@@ -462,7 +440,59 @@ qise adapters hermes
 qise adapters nexau
 ```
 
+LangGraph 示例：
+
+```python
+from qise import Shield
+from qise.adapters.langgraph import QiseLangGraphWrapper
+
+shield = Shield.from_config()
+wrapper = QiseLangGraphWrapper(shield)
+safe_tools = [wrapper.wrap_tool_call(tool) for tool in my_tools]
+```
+
+OpenAI Agents SDK 示例：
+
+```python
+from qise import Shield
+from qise.adapters.openai_agents import QiseOpenAIAgentsGuardrails
+
+shield = Shield.from_config()
+guardrails = QiseOpenAIAgentsGuardrails(shield)
+agent = Agent(
+    name="my-agent",
+    guardrails=[guardrails.input_guardrail, guardrails.output_guardrail],
+)
+```
+
 如果你正在开发 Agent，并希望在工具、输入、输出或框架 hook 周围做进程内检查，使用 adapter。若你希望零代码保护一个现有 OpenAI-compatible Agent 或 Claude Code，则优先使用 proxy 模式。
+
+## 集成模式
+
+| 模式 | 需要写代码吗 | 适合谁 |
+| --- | --- | --- |
+| 桌面应用 | 0 行 | 希望用可视化控制台的普通用户。 |
+| Proxy mode | 0 行 | 可以把模型流量指向本地 base URL 的现有 Agent。 |
+| MCP mode | 0 行 | 可以把 Qise 作为 MCP server 调用的 Agent。 |
+| SDK mode | 1-5 行 | 正在构建 Agent 框架或自定义工具的开发者。 |
+
+## 项目结构
+
+```text
+src/qise/              Python 产品引擎、CLI、proxy、bridge、guards、adapters
+src/qise/guards/       Prompt、command、credential、filesystem、network、exfil 等 Guard
+src/qise/product/      面向用户的流程：protect、restore、scan、status、doctor、events、SLM
+src/qise/proxy/        OpenAI-compatible 与 Anthropic Messages 本地 proxy 和 streaming 支持
+src/qise/bridge/       桌面 UI/Guard 控制使用的本地 bridge
+src/qise/adapters/     SDK/框架集成片段和适配器
+src-ui/                React + TypeScript 桌面前端
+src-tauri/             Tauri 2 Rust 桌面外壳和 IPC 命令
+src-proxy/             Rust proxy 实验/运行时组件
+data/                  威胁模式、安全上下文、prompt 示例
+docs/                  更深入的安装、架构、隐私、事件和集成文档
+examples/              安全/危险示例 skill、MCP config 和 Agent 示例
+tests/                 Guard、proxy、CLI 和产品流程的 Python 测试
+```
 
 ## 配置
 
@@ -567,11 +597,11 @@ qise events --limit 5
 
 ## 当前限制
 
-- 在包发布完成前，源码安装是主要支持路径。
+- 在包发布和签名安装包完成前，源码安装和源码构建桌面包是主要支持路径。
 - Proxy 模式当前主要面向 OpenAI-compatible chat/completions 流量和 Anthropic Messages `/v1/messages` 流量。
 - Runtime Observer 是用户态 wrapper，不是 OS/kernel 级审计。
-- 当前 MVP 的桌面应用以源码构建为主。
 - 本地 SLM 的质量和延迟取决于你选择的模型与服务。
+- 本 README 暂时聚焦 macOS 桌面应用打包；Windows 打包暂未在这里展开。
 
 ## 了解更多
 
@@ -587,3 +617,7 @@ qise events --limit 5
 - [Runtime Observer](./docs/runtime-observer.md)
 - [故障排查](./docs/troubleshooting.md)
 - [隐私](./docs/privacy.md)
+
+## License
+
+[CC BY-NC-SA 4.0](./LICENSE) - 免费用于个人、学术和非商业用途。商业使用需要单独授权。

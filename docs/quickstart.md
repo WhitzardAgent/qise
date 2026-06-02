@@ -5,7 +5,7 @@ This quickstart gives you a local Qise MVP loop: diagnose, scan, block a dangero
 ## Install
 
 ```bash
-git clone https://github.com/opq-qise/qise.git
+git clone https://github.com/WhitzardAgent/qise.git
 cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate
