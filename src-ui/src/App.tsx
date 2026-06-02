@@ -782,7 +782,7 @@ function HomePage({
     backup: `${Object.keys(status?.protected_agents ?? {}).length}`,
   };
 
-  const STATUS_GLYPH = protectedEnabled ? tr(locale, "ON", "开") : tr(locale, "SET", "设");
+  const STATUS_GLYPH = protectedEnabled ? "\u{1F6E1}" : "⚠";
   const mainStatus = protectedEnabled ? tr(locale, "Protection is on", "保护已开启") : tr(locale, "Protection needs setup", "保护需要设置");
   const statusDetail = protectedEnabled
     ? tr(locale, `${protectedAgents.length} agents protected · Blocked ${counts.blocked} threats today · ${counts.warnings} warnings`, `已保护 ${protectedAgents.length} 个智能体 · 今日拦截 ${counts.blocked} 次威胁 · ${counts.warnings} 条告警`)
