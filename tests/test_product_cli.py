@@ -442,6 +442,42 @@ def test_protect_restore_openclaw_json_config(tmp_path: Path) -> None:
     assert json.loads(openclaw_config.read_text()) == original
 
 
+def test_protect_restore_claude_code_settings(tmp_path: Path) -> None:
+    agent_home = tmp_path / "agent-home"
+    claude_config = agent_home / ".claude" / "settings.json"
+    claude_config.parent.mkdir(parents=True)
+    original = {
+        "apiKeyHelper": "echo test-key",
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+        },
+    }
+    claude_config.write_text(json.dumps(original, indent=2, sort_keys=True) + "\n")
+
+    env = {
+        "QISE_AGENT_HOME": str(agent_home),
+        "QISE_NO_START_SERVICES": "1",
+        "ANTHROPIC_API_KEY": "sk-ant-test",
+        "OPENAI_API_KEY": "sk-openai-should-not-win",
+    }
+    protected = _run(["protect", "claude-code"], tmp_path, env)
+    assert protected.returncode == 0
+    assert "Claude Code is protected" in protected.stdout
+
+    patched = json.loads(claude_config.read_text())
+    assert patched["apiKeyHelper"] == "echo test-key"
+    assert patched["env"]["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8822/agent/claude-code/v1"
+
+    state = json.loads((tmp_path / "qise-home" / "state.json").read_text())
+    record = state["protected_agents"]["claude-code"]
+    assert record["proxy_env_key"] == "ANTHROPIC_API_KEY"
+    assert record["upstream_url"] == "https://api.anthropic.com"
+
+    restored = _run(["restore", "claude-code"], tmp_path, env)
+    assert restored.returncode == 0
+    assert json.loads(claude_config.read_text()) == original
+
+
 
 def test_scan_example_skills(tmp_path: Path) -> None:
     safe = ROOT / "examples" / "skills" / "safe"

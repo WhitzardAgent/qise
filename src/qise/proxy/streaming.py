@@ -334,3 +334,212 @@ class SSEStreamHandler:
         """Format an SSE warning event."""
         event_data = json.dumps({"warnings": warnings[:5]})
         return f"event: warning\ndata: {event_data}\n\n"
+
+
+class AnthropicBufferedToolUse:
+    """Accumulates one Anthropic streaming tool_use content block."""
+
+    def __init__(self, index: int, start_frame: str, content_block: dict[str, Any]) -> None:
+        self.index = index
+        self.frames: list[str] = [start_frame]
+        self.call_id = str(content_block.get("id") or "")
+        self.tool_name = str(content_block.get("name") or "")
+        self.initial_input = content_block.get("input") if isinstance(content_block.get("input"), dict) else {}
+        self.partial_json = ""
+
+    @property
+    def tool_args(self) -> dict[str, Any]:
+        if not self.partial_json:
+            return self.initial_input
+        try:
+            parsed = json.loads(self.partial_json)
+            return parsed if isinstance(parsed, dict) else {"_raw_arguments": self.partial_json}
+        except (json.JSONDecodeError, TypeError):
+            return {"_raw_arguments": self.partial_json}
+
+
+class AnthropicSSEStreamHandler:
+    """Process Anthropic Messages SSE streams with tool_use guard checks."""
+
+    def __init__(
+        self,
+        interceptor: ProxyInterceptor,
+        session_id: str | None = None,
+        agent_name: str = "",
+    ) -> None:
+        self._interceptor = interceptor
+        self._session_id = session_id
+        self._agent_name = agent_name
+        self._parser = ResponseParser()
+        self._buffered: dict[int, AnthropicBufferedToolUse] = {}
+        self._text_chunks: list[str] = []
+        self._blocked = False
+
+    async def process_stream(
+        self,
+        upstream_resp: Any,
+        session_id: str | None = None,
+    ) -> AsyncGenerator[bytes, None]:
+        self._session_id = session_id or self._session_id
+        buffer = ""
+
+        try:
+            line_iter = upstream_resp.content if hasattr(upstream_resp, "content") else upstream_resp
+            async for chunk in line_iter:
+                decoded = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else chunk
+                buffer += decoded
+                while "\n\n" in buffer:
+                    raw_frame, buffer = buffer.split("\n\n", 1)
+                    async for out in self._process_frame(raw_frame):
+                        yield out
+
+            if buffer.strip():
+                async for out in self._process_frame(buffer):
+                    yield out
+        except Exception as e:
+            logger.error("Anthropic SSE stream error: %s", e)
+            yield self._anthropic_error_event(f"Stream error: {e}").encode("utf-8")
+
+    async def _process_frame(self, raw_frame: str) -> AsyncGenerator[bytes, None]:
+        if self._blocked:
+            return
+        event, data = self._parse_sse_frame(raw_frame)
+        frame_bytes = (raw_frame + "\n\n").encode("utf-8")
+        if not data:
+            yield frame_bytes
+            return
+
+        try:
+            payload = json.loads(data)
+        except json.JSONDecodeError:
+            yield frame_bytes
+            return
+
+        event_type = event or payload.get("type", "")
+        if event_type == "content_block_start":
+            content_block = payload.get("content_block", {})
+            index = int(payload.get("index", 0))
+            if isinstance(content_block, dict) and content_block.get("type") == "tool_use":
+                self._buffered[index] = AnthropicBufferedToolUse(index, raw_frame + "\n\n", content_block)
+                return
+            yield frame_bytes
+            return
+
+        if event_type == "content_block_delta":
+            index = int(payload.get("index", 0))
+            delta = payload.get("delta", {})
+            if index in self._buffered:
+                buffered = self._buffered[index]
+                buffered.frames.append(raw_frame + "\n\n")
+                if isinstance(delta, dict) and delta.get("type") == "input_json_delta":
+                    partial = delta.get("partial_json", "")
+                    if isinstance(partial, str):
+                        buffered.partial_json += partial
+                return
+            if isinstance(delta, dict) and delta.get("type") == "text_delta":
+                text = delta.get("text", "")
+                if isinstance(text, str):
+                    self._text_chunks.append(text)
+            yield frame_bytes
+            return
+
+        if event_type == "content_block_stop":
+            index = int(payload.get("index", 0))
+            if index in self._buffered:
+                buffered = self._buffered.pop(index)
+                buffered.frames.append(raw_frame + "\n\n")
+                async for out in self._check_and_emit_tool_use(buffered):
+                    yield out
+                return
+            yield frame_bytes
+            return
+
+        if event_type == "message_stop":
+            for index in sorted(list(self._buffered)):
+                buffered = self._buffered.pop(index)
+                async for out in self._check_and_emit_tool_use(buffered):
+                    yield out
+            yield frame_bytes
+            self._post_stream_output_check()
+            return
+
+        yield frame_bytes
+
+    def _parse_sse_frame(self, raw_frame: str) -> tuple[str, str]:
+        event = ""
+        data_lines: list[str] = []
+        for line in raw_frame.splitlines():
+            if line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[5:].strip())
+        return event, "\n".join(data_lines)
+
+    async def _check_and_emit_tool_use(
+        self,
+        buffered: AnthropicBufferedToolUse,
+    ) -> AsyncGenerator[bytes, None]:
+        response_body = {
+            "type": "message",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": buffered.call_id,
+                    "name": buffered.tool_name,
+                    "input": buffered.tool_args,
+                }
+            ],
+        }
+        result = self._interceptor.intercept_response(
+            parsed=self._parser.parse_anthropic(response_body),
+            raw_body=response_body,
+            agent_name=self._agent_name,
+        )
+
+        if result.action == "block" and self._interceptor._config and self._interceptor._config.block_on_guard_block:
+            logger.warning("Anthropic stream: blocked tool_use %s — %s", buffered.tool_name, result.block_reason)
+            self._blocked = True
+            yield self._anthropic_error_event(
+                f"Qise blocked tool call '{buffered.tool_name}': {result.block_reason}"
+            ).encode("utf-8")
+            return
+
+        if result.action == "warn":
+            logger.warning(
+                "Anthropic stream: tool_use warning for %s — %s",
+                buffered.tool_name,
+                "; ".join(result.warnings[:3]),
+            )
+
+        for frame in buffered.frames:
+            yield frame.encode("utf-8")
+
+    def _post_stream_output_check(self) -> None:
+        full_text = "".join(self._text_chunks)
+        if not full_text:
+            return
+
+        result = self._interceptor.intercept_response(
+            parsed=self._parser.parse_anthropic({
+                "type": "message",
+                "content": [{"type": "text", "text": full_text}],
+            }),
+            raw_body={},
+            agent_name=self._agent_name,
+        )
+        if result.action in ("warn", "block"):
+            logger.warning(
+                "Anthropic stream output check: %s — %s",
+                result.action,
+                "; ".join(result.warnings[:3]),
+            )
+
+    def _anthropic_error_event(self, message: str) -> str:
+        data = {
+            "type": "error",
+            "error": {
+                "type": "permission_error",
+                "message": message,
+            },
+        }
+        return f"event: error\ndata: {json.dumps(data)}\n\n"

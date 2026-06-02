@@ -28,7 +28,7 @@ from qise.proxy.config import ProxyConfig
 from qise.proxy.context_injector import ContextInjector
 from qise.proxy.interceptor import ProxyDecision, ProxyInterceptor
 from qise.proxy.parser import RequestParser, ResponseParser
-from qise.proxy.streaming import SSEStreamHandler
+from qise.proxy.streaming import AnthropicSSEStreamHandler, SSEStreamHandler
 
 logger = logging.getLogger("qise.proxy")
 
@@ -38,6 +38,7 @@ class ResolvedProxyRoute:
     agent_name: str = ""
     upstream_base_url: str = ""
     upstream_api_key: str = ""
+    upstream_api_key_env: str = ""
 
 
 class ProxyServer:
@@ -148,18 +149,21 @@ class ProxyServer:
             agent_name=agent_name,
             upstream_base_url=upstream,
             upstream_api_key=os.environ.get(env_key, "") if env_key else "",
+            upstream_api_key_env=env_key,
         )
 
     def _route_from_auth(self, request: web.Request) -> ResolvedProxyRoute | None:
         auth = request.headers.get("Authorization", "")
         token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-        if not token:
+        api_key = request.headers.get("X-Api-Key", "") or request.headers.get("x-api-key", "")
+        if not token and not api_key:
             return None
 
         matches: list[ResolvedProxyRoute] = []
         for agent_name, record in self._protected_agent_records().items():
             env_key = str(record.get("proxy_env_key") or record.get("upstream_api_key_env") or "")
-            if env_key and os.environ.get(env_key) == token:
+            env_value = os.environ.get(env_key) if env_key else ""
+            if env_value and env_value in {token, api_key}:
                 route = self._route_from_record(agent_name, record)
                 if route.upstream_base_url:
                     matches.append(route)
@@ -198,6 +202,9 @@ class ProxyServer:
             upstream_api_key=self._config.upstream_api_key,
         )
 
+    def _api_format_for_path(self, path: str) -> str:
+        return "anthropic" if path == "/v1/messages" or path.startswith("/v1/messages/") else "openai"
+
     async def _handle_request(self, request: web.Request) -> web.Response:
         """Main request handler — all paths pass through here.
 
@@ -227,6 +234,10 @@ class ProxyServer:
         # Intercept chat completion requests
         if path_without_query == "/v1/chat/completions" and request.method == "POST":
             return await self._handle_chat_completions(
+                request, path_override=path_without_query, agent_name=agent_name
+            )
+        if path_without_query == "/v1/messages" and request.method == "POST":
+            return await self._handle_anthropic_messages(
                 request, path_override=path_without_query, agent_name=agent_name
             )
 
@@ -281,19 +292,24 @@ class ProxyServer:
         # Step 5: Forward to upstream
         if is_stream:
             return await self._handle_streaming(
-                request, forward_body, path_override=path_override, route=route, agent_name=agent_name
+                request,
+                forward_body,
+                path_override=path_override,
+                route=route,
+                agent_name=agent_name,
+                api_format="openai",
             )
 
         # Non-streaming path
         upstream_response = await self._forward_to_upstream(
-            request, forward_body, path_override=path_override, route=route
+            request, forward_body, path_override=path_override, route=route, api_format="openai"
         )
         if upstream_response.status != 200:
             return upstream_response
 
         # Step 6: Parse response
         try:
-            response_body = await upstream_response.json()
+            response_body = self._response_json(upstream_response)
         except Exception:
             return upstream_response
 
@@ -322,6 +338,81 @@ class ProxyServer:
             resp_headers["X-Qise-Metrics"] = self._shield.metrics.brief()
         return web.json_response(response_body, headers=resp_headers)
 
+    async def _handle_anthropic_messages(
+        self,
+        request: web.Request,
+        *,
+        path_override: str | None = None,
+        agent_name: str = "",
+    ) -> web.Response:
+        """Handle Anthropic /v1/messages with the full interception pipeline."""
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, Exception) as e:
+            return web.json_response(
+                {"type": "error", "error": {"type": "invalid_request_error", "message": f"Invalid JSON: {e}"}},
+                status=400,
+            )
+
+        route = self._resolve_route(request, body, agent_name)
+        agent_name = route.agent_name or agent_name
+
+        parsed_request = self._request_parser.parse_anthropic(body)
+
+        import asyncio
+        request_decision = await asyncio.to_thread(
+            self._interceptor.intercept_request, parsed_request, body, agent_name
+        )
+
+        if request_decision.action == "block" and self._config.block_on_guard_block:
+            logger.warning("Anthropic request BLOCKED: %s", request_decision.block_reason)
+            return self._block_response(request_decision, api_format="anthropic")
+
+        forward_body = request_decision.modified_body
+        if self._config.inject_security_context:
+            forward_body = self._context_injector.inject_anthropic(forward_body)
+
+        if parsed_request.stream:
+            return await self._handle_streaming(
+                request,
+                forward_body,
+                path_override=path_override,
+                route=route,
+                agent_name=agent_name,
+                api_format="anthropic",
+            )
+
+        upstream_response = await self._forward_to_upstream(
+            request,
+            forward_body,
+            path_override=path_override,
+            route=route,
+            api_format="anthropic",
+        )
+        if upstream_response.status != 200:
+            return upstream_response
+
+        try:
+            response_body = self._response_json(upstream_response)
+        except Exception:
+            return upstream_response
+
+        parsed_response = self._response_parser.parse_anthropic(response_body)
+        response_decision = await asyncio.to_thread(
+            self._interceptor.intercept_response, parsed_response, response_body, agent_name
+        )
+
+        if response_decision.action == "block" and self._config.block_on_guard_block:
+            logger.warning("Anthropic response BLOCKED: %s", response_decision.block_reason)
+            return self._block_response(response_decision, api_format="anthropic")
+
+        headers = {}
+        if response_decision.action == "warn":
+            headers["X-Qise-Warnings"] = "; ".join(response_decision.warnings[:5])
+        if hasattr(self._shield, "metrics"):
+            headers["X-Qise-Metrics"] = self._shield.metrics.brief()
+        return web.json_response(response_body, headers=headers)
+
     def _upstream_url(self, path: str, upstream_base_url: str | None = None) -> str:
         base = (upstream_base_url if upstream_base_url is not None else self._config.upstream_base_url).rstrip("/")
         if not path.startswith("/"):
@@ -329,6 +420,45 @@ class ProxyServer:
         if base.endswith("/v1") and path.startswith("/v1/"):
             return base[:-3] + path
         return base + path
+
+    def _response_json(self, response: web.Response) -> dict[str, Any]:
+        body = response.body or b"{}"
+        if isinstance(body, str):
+            return json.loads(body)
+        return json.loads(body.decode(response.charset or "utf-8"))
+
+    def _build_forward_headers(
+        self,
+        request: web.Request,
+        route: ResolvedProxyRoute,
+        *,
+        api_format: str,
+        streaming: bool = False,
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        skip = {"host", "content-length", "transfer-encoding"}
+        if streaming:
+            skip.add("accept")
+        for key, value in request.headers.items():
+            key_lower = key.lower()
+            if key_lower in skip:
+                continue
+            if route.upstream_api_key and key_lower in {"authorization", "x-api-key"}:
+                continue
+            headers[key] = value
+
+        if api_format == "anthropic":
+            if "anthropic-version" not in {key.lower() for key in headers}:
+                headers["anthropic-version"] = "2023-06-01"
+            if route.upstream_api_key:
+                if route.upstream_api_key_env == "ANTHROPIC_AUTH_TOKEN":
+                    headers["Authorization"] = f"Bearer {route.upstream_api_key}"
+                else:
+                    headers["X-Api-Key"] = route.upstream_api_key
+        elif route.upstream_api_key:
+            headers["Authorization"] = f"Bearer {route.upstream_api_key}"
+
+        return headers
 
     async def _handle_streaming(
         self,
@@ -338,6 +468,7 @@ class ProxyServer:
         path_override: str | None = None,
         route: ResolvedProxyRoute | None = None,
         agent_name: str = "",
+        api_format: str = "openai",
     ) -> web.StreamResponse:
         """Handle streaming (SSE) chat completion requests.
 
@@ -353,18 +484,7 @@ class ProxyServer:
             return resp  # type: ignore[return-value]
         upstream_url = self._upstream_url(path, route.upstream_base_url)
 
-        # Build headers
-        headers = {}
-        for key, value in request.headers.items():
-            key_lower = key.lower()
-            if key_lower in ("host", "content-length", "transfer-encoding", "accept"):
-                continue
-            if key_lower == "authorization" and route.upstream_api_key:
-                continue
-            headers[key] = value
-
-        if route.upstream_api_key:
-            headers["Authorization"] = f"Bearer {route.upstream_api_key}"
+        headers = self._build_forward_headers(request, route, api_format=api_format, streaming=True)
 
         session = await self._get_session()
 
@@ -393,7 +513,10 @@ class ProxyServer:
         await stream_resp.prepare(request)
 
         # Process the SSE stream
-        handler = SSEStreamHandler(self._interceptor, agent_name=route.agent_name or agent_name)
+        if api_format == "anthropic":
+            handler = AnthropicSSEStreamHandler(self._interceptor, agent_name=route.agent_name or agent_name)
+        else:
+            handler = SSEStreamHandler(self._interceptor, agent_name=route.agent_name or agent_name)
         async for chunk in handler.process_stream(upstream_resp):
             await stream_resp.write(chunk)
 
@@ -410,8 +533,13 @@ class ProxyServer:
     ) -> web.Response:
         """Forward a request to the upstream without interception."""
         body = await request.json() if request.method in ("POST", "PUT", "PATCH") else None
+        path = path_override or self._canonical_path_and_agent("/" + request.match_info.get("path", ""))[1]
         return await self._forward_to_upstream(
-            request, body, path_override=path_override, route=self._resolve_route(request, body, agent_name)
+            request,
+            body,
+            path_override=path,
+            route=self._resolve_route(request, body, agent_name),
+            api_format=self._api_format_for_path(path),
         )
 
     async def _forward_to_upstream(
@@ -421,6 +549,7 @@ class ProxyServer:
         *,
         path_override: str | None = None,
         route: ResolvedProxyRoute | None = None,
+        api_format: str | None = None,
     ) -> web.Response:
         """Forward the request to the upstream LLM API.
 
@@ -435,19 +564,8 @@ class ProxyServer:
             )
         path = path_override or self._canonical_path_and_agent("/" + request.match_info.get("path", ""))[1]
         upstream_url = self._upstream_url(path, route.upstream_base_url)
-
-        # Build headers — forward most, but replace auth
-        headers = {}
-        for key, value in request.headers.items():
-            key_lower = key.lower()
-            if key_lower in ("host", "content-length", "transfer-encoding"):
-                continue
-            if key_lower == "authorization" and route.upstream_api_key:
-                continue  # Will be replaced
-            headers[key] = value
-
-        if route.upstream_api_key:
-            headers["Authorization"] = f"Bearer {route.upstream_api_key}"
+        api_format = api_format or self._api_format_for_path(path)
+        headers = self._build_forward_headers(request, route, api_format=api_format)
 
         # Get or create HTTP session
         session = await self._get_session()
@@ -491,8 +609,21 @@ class ProxyServer:
             self._session = aiohttp.ClientSession()
         return self._session
 
-    def _block_response(self, decision: ProxyDecision) -> web.Response:
+    def _block_response(self, decision: ProxyDecision, *, api_format: str = "openai") -> web.Response:
         """Return an error response for blocked requests/responses."""
+        if api_format == "anthropic":
+            return web.json_response(
+                {
+                    "type": "error",
+                    "error": {
+                        "type": "permission_error",
+                        "message": decision.block_reason,
+                        "warnings": decision.warnings,
+                        "guard_results": decision.guard_results,
+                    },
+                },
+                status=403,
+            )
         return web.json_response(
             {
                 "error": {

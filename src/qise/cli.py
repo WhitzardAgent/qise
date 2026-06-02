@@ -391,6 +391,14 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
         proxy_config.listen_host = args.host
     if args.upstream is not None:
         proxy_config.upstream_base_url = args.upstream.rstrip("/")
+        if args.upstream_key is None and "anthropic" in proxy_config.upstream_base_url.lower():
+            import os
+
+            proxy_config.upstream_api_key = (
+                os.getenv("ANTHROPIC_API_KEY")
+                or os.getenv("ANTHROPIC_AUTH_TOKEN")
+                or proxy_config.upstream_api_key
+            )
     if args.upstream_key is not None:
         proxy_config.upstream_api_key = args.upstream_key
     if args.no_inject:
@@ -401,7 +409,7 @@ def _cmd_proxy(args: argparse.Namespace) -> int:
     if not proxy_config.upstream_base_url:
         print(
             "Error: proxy upstream is not configured. Use --upstream, "
-            "integration.proxy.upstream_url, QISE_PROXY_UPSTREAM_URL, or OPENAI_API_BASE.",
+            "integration.proxy.upstream_url, QISE_PROXY_UPSTREAM_URL, OPENAI_API_BASE, or ANTHROPIC_BASE_URL.",
             file=sys.stderr,
         )
         return 2

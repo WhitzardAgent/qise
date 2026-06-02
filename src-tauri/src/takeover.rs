@@ -271,7 +271,7 @@ impl TakeoverManager {
     }
 
     /// Take over Claude Code by modifying its settings.
-    /// Claude Code uses CLAUDE_API_BASE env var or settings files.
+    /// Claude Code uses ANTHROPIC_BASE_URL env var or settings files.
     fn takeover_claude_code_config(&self) -> Option<String> {
         // Claude Code's primary config is via ANTHROPIC_BASE_URL env var,
         // which we already handle via takeover_env_vars().
@@ -288,16 +288,23 @@ impl TakeoverManager {
                 // Backup original
                 let backup_path = format!("{}/claude_settings_{}.json", self.backup_dir.display(), timestamp_short());
                 if std::fs::write(&backup_path, &content).is_ok() {
-                    // Try to set apiBaseUrl
                     if let Some(obj) = settings.as_object_mut() {
-                        obj.insert("apiBaseUrl".to_string(), serde_json::Value::String(proxy_url.clone()));
+                        let env = obj
+                            .entry("env".to_string())
+                            .or_insert_with(|| serde_json::json!({}));
+                        if let Some(env_obj) = env.as_object_mut() {
+                            env_obj.insert(
+                                "ANTHROPIC_BASE_URL".to_string(),
+                                serde_json::Value::String(proxy_url.clone()),
+                            );
+                        }
                     }
                     // Atomic write: write to temp file then rename
                     let temp_path = format!("{}.tmp", settings_path);
                     if let Ok(json) = serde_json::to_string_pretty(&settings) {
                         if std::fs::write(&temp_path, &json).is_ok() {
                             if std::fs::rename(&temp_path, &settings_path).is_ok() {
-                                info!("Claude Code settings.json updated with apiBaseUrl = {}", proxy_url);
+                                info!("Claude Code settings.json updated with env.ANTHROPIC_BASE_URL = {}", proxy_url);
                                 return Some(backup_path);
                             }
                         }

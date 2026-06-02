@@ -97,7 +97,7 @@ For agents using streaming responses (SSE), the proxy:
 | Codex | OpenAI-compatible `/v1/chat/completions` | Verified via `qise protect codex` |
 | OpenClaw | OpenAI-compatible `/v1/chat/completions` | Verified via `qise protect openclaw`; config layouts may vary |
 | Custom agents | OpenAI-compatible `/v1/chat/completions` | Manual via `qise protect custom --base-url ...` or proxy config |
-| Claude Code | Commonly Anthropic-native `/v1/messages` | Experimental; do not market as complete native protection yet |
+| Claude Code | Anthropic-native `/v1/messages` | Verified via `qise protect claude-code`; supports native Messages request/response parsing and streaming `tool_use` checks |
 | Gemini CLI / Hermes | Depends on local configuration | Advanced/manual integration, not a release blocker |
 
 ### CLI Proxy Mode
@@ -108,6 +108,7 @@ For users who prefer CLI over the desktop app:
 # Recommended product path: auto-back up and patch a known Agent config
 qise protect codex
 qise protect openclaw
+qise protect claude-code --base-url https://api.anthropic.com
 
 # Custom OpenAI-compatible Agent
 qise protect custom --base-url https://api.example.com/v1

@@ -208,7 +208,7 @@ def start_managed_services(
     if not upstream_url:
         raise ValueError(
             "Proxy upstream is not configured. Set integration.proxy.upstream_url, "
-            "QISE_PROXY_UPSTREAM_URL, OPENAI_API_BASE, or pass --base-url."
+            "QISE_PROXY_UPSTREAM_URL, OPENAI_API_BASE, ANTHROPIC_BASE_URL, or pass --base-url."
         )
 
     state = load_state()

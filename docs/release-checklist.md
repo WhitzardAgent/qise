@@ -100,5 +100,5 @@ ruff check src/qise tests
 Pass criteria:
 
 - No secrets, local `shield.yaml`, event logs, model caches, or internal planning docs are staged.
-- Public docs avoid claiming complete Claude Code native Anthropic support until `/v1/messages` is implemented and verified.
-- README quickstart, SLM commands, OpenClaw/Codex docs, and release notes are consistent.
+- Public docs describe Claude Code native Anthropic `/v1/messages` support only when parser, proxy, streaming, protect, restore, and event evidence tests pass.
+- README quickstart, SLM commands, OpenClaw/Codex/Claude Code docs, and release notes are consistent.

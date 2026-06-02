@@ -20,7 +20,7 @@ Qise is organized as a layered system with three integration modes ranging from 
 │  │  • Response 拦截: 检查 LLM 响应中的危险指令/行为                    │ │
 │  │  • Tool Call 拦截: 解析 tool_use 请求, 运行 Guard Pipeline          │ │
 │  │  • Tool Result 拦截: 检查 tool_result 中的注入内容                  │ │
-│  │  适用于: Codex / OpenClaw / 自定义 OpenAI-compatible Agent        │ │
+│  │  适用于: Codex / OpenClaw / Claude Code / 自定义 Agent           │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
 │  ┌── Mode B: MCP Mode (Zero-Code) ────────────────────────────────────┐ │
@@ -133,10 +133,10 @@ Agent (Codex / OpenClaw / custom OpenAI-compatible)
 4. 退出时自动恢复原始配置
 5. 崩溃恢复: 启动时检测未恢复的配置并自动修复
 
-**适用 Agent**: 当前 MVP 验证 Codex、OpenClaw 和自定义 OpenAI-compatible Agent。Claude Code 原生 Anthropic `/v1/messages` 接入仍是 experimental。
+**适用 Agent**: 当前 MVP 验证 Codex、OpenClaw、自定义 OpenAI-compatible Agent，以及通过原生 Anthropic `/v1/messages` 接入的 Claude Code。
 
 **优势**: 零代码, 完整轨迹访问, 自动拦截
-**劣势**: 需要理解 API 协议细节; 流式响应(SSE)处理复杂; 对非 OpenAI-compatible 的 Agent 不适用
+**劣势**: 需要理解 API 协议细节; 流式响应(SSE)处理复杂; 新增原生模型协议需要专门的 parser/header/streaming 适配
 
 ### Mode B: MCP Mode (零代码，能力受限)
 

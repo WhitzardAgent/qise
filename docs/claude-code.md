@@ -1,19 +1,42 @@
-# Claude Code Status
+# Claude Code Integration
 
-Claude Code support is experimental in the current MVP.
+Qise supports Claude Code through the Anthropic Messages API path:
 
-## Current Limitation
-
-The verified Qise proxy path is OpenAI-compatible `/v1/chat/completions` traffic. Claude Code commonly uses Anthropic-native `/v1/messages` traffic, which is not complete in this MVP.
-
-## Command
-
-```bash
-qise protect claude-code --experimental
+```text
+Claude Code -> http://127.0.0.1:8822/agent/claude-code/v1/messages -> Anthropic upstream
 ```
 
-Qise requires `--experimental` so users do not mistake this for complete native Claude Code protection.
+## What Qise Protects
 
-## Recommendation
+- Parses Anthropic `/v1/messages` requests, including top-level `system`, `messages`, `tools`, `tool_result`, and `tool_use` content blocks.
+- Injects Qise security context into the Anthropic top-level `system` field.
+- Checks user content, tool results, and tool descriptions before forwarding to Anthropic.
+- Checks non-streaming Anthropic responses for text output and `tool_use` calls.
+- Checks streaming Anthropic `tool_use` blocks by buffering the tool input JSON until the block is complete, then releasing or blocking the block.
 
-Do not market Claude Code as fully supported until Anthropic-native request/response parsing, proxying, event evidence, and restore behavior are implemented and verified.
+## Setup
+
+Make sure Claude Code works before adding Qise, then keep your Anthropic key available:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+qise protect claude-code --base-url https://api.anthropic.com
+qise status
+```
+
+If your Claude Code setup uses `apiKeyHelper`, you can keep it. Qise patches `~/.claude/settings.json` to set `env.ANTHROPIC_BASE_URL` to the local proxy and stores a restorable backup under `~/.qise/backups/claude-code/...`.
+
+## Restore
+
+```bash
+qise restore claude-code
+qise stop
+```
+
+`qise restore claude-code` restores the backed-up Claude Code settings file. `qise stop` stops the Qise-managed proxy and bridge services.
+
+## Notes
+
+- Use `https://api.anthropic.com` as the upstream base URL for the native Anthropic API.
+- Qise forwards `ANTHROPIC_API_KEY` as `X-Api-Key` and `ANTHROPIC_AUTH_TOKEN` as `Authorization: Bearer ...` for Anthropic Messages traffic.
+- Qise preserves Anthropic headers such as `anthropic-version` and `anthropic-beta`, and adds `anthropic-version: 2023-06-01` when a native Anthropic request does not include one.

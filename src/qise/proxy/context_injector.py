@@ -70,6 +70,43 @@ class ContextInjector:
 
         return new_body
 
+    def inject_anthropic(self, body: dict[str, Any], tool_names: list[str] | None = None) -> dict[str, Any]:
+        """Inject security context into an Anthropic /v1/messages request body.
+
+        Anthropic uses a top-level ``system`` field instead of a system role in
+        ``messages``. The field can be a string or an array of text blocks.
+        """
+        if tool_names is None:
+            tool_names = self._extract_anthropic_tool_names(body)
+
+        if not tool_names:
+            return body
+
+        context_parts: list[str] = []
+        for tool_name in tool_names:
+            ctx = self._provider.render_for_agent(tool_name)
+            if ctx:
+                context_parts.append(ctx)
+
+        if not context_parts:
+            return body
+
+        injection = "\n\n".join(context_parts)
+        new_body = copy.deepcopy(body)
+        system = new_body.get("system")
+        if isinstance(system, str):
+            new_body["system"] = system + "\n\n" + injection if system else injection
+        elif isinstance(system, list):
+            system.append({"type": "text", "text": injection})
+        elif system is None:
+            new_body["system"] = injection
+        else:
+            new_body["system"] = [
+                {"type": "text", "text": str(system)},
+                {"type": "text", "text": injection},
+            ]
+        return new_body
+
     def _inject_into_messages(self, messages: list[dict[str, Any]], injection: str) -> None:
         """Inject security context text into the message list.
 
@@ -97,6 +134,19 @@ class ContextInjector:
         for tool in body.get("tools", []):
             func = tool.get("function", {})
             name = func.get("name", "")
+            if name and name not in seen:
+                names.append(name)
+                seen.add(name)
+        return names
+
+    def _extract_anthropic_tool_names(self, body: dict[str, Any]) -> list[str]:
+        """Extract unique tool names from Anthropic tool definitions."""
+        names: list[str] = []
+        seen: set[str] = set()
+        for tool in body.get("tools", []):
+            if not isinstance(tool, dict):
+                continue
+            name = tool.get("name", "")
             if name and name not in seen:
                 names.append(name)
                 seen.add(name)

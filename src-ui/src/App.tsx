@@ -958,7 +958,7 @@ function AgentShieldPage({
 }: {
   agents: AgentInfo[];
   task: TaskState<string>;
-  onProtectAgent: (agent: AgentInfo) => void;
+  onProtectAgent: (agent: AgentInfo, baseUrl: string) => void;
   onRestoreAgent: (agent: AgentInfo) => void;
   onRestoreAll: () => void;
   onStopServices: () => void;
@@ -992,7 +992,7 @@ function AgentShieldPage({
         <div className="qise-card p-5">
           <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Custom Agent", "自定义智能体")}</h3>
           <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-            {tr(locale, "Route an OpenAI-compatible custom agent through Qise by providing its upstream base URL.", "提供上游基础地址后，可让兼容接口的自定义智能体经由 Qise。")}
+            {tr(locale, "Route a custom OpenAI-compatible or Anthropic-native agent through Qise by providing its upstream base URL.", "提供上游基础地址后，可让自定义 OpenAI-compatible 或 Anthropic-native 智能体经由 Qise。")}
           </p>
           <label className="mt-3 block">
             <span className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Upstream base URL", "上游基础地址")}</span>
@@ -1672,6 +1672,7 @@ function IntegrationsPage({ setError, locale }: { setError: (error: string | nul
           <h3 className="text-sm font-semibold uppercase text-[var(--text-primary)]">{tr(locale, "Runtime Modes", "运行模式")}</h3>
           <div className="mt-3 space-y-2 text-xs text-[var(--text-secondary)]">
             <code className="block rounded bg-[var(--bg-card)] p-2">qise proxy start --upstream https://api.openai.com/v1</code>
+            <code className="block rounded bg-[var(--bg-card)] p-2">qise proxy start --upstream https://api.anthropic.com</code>
             <code className="block rounded bg-[var(--bg-card)] p-2">qise bridge start</code>
             <code className="block rounded bg-[var(--bg-card)] p-2">qise serve --transport stdio</code>
           </div>
@@ -2005,15 +2006,17 @@ function App() {
     })();
   }
 
-  function protectAgent(agent: AgentInfo) {
+  function protectAgent(agent: AgentInfo, baseUrl: string) {
     runShieldAction(
       `protect:${agent.key}`,
       tr(locale, `Protecting ${agent.name}`, `正在保护 ${agent.name}`),
-      tr(locale, "Patching agent config and starting Qise managed services.", "正在修改智能体配置并启动 Qise 管理的服务。"),
+      agent.key === "claude-code"
+        ? tr(locale, "Routing Claude Code through Qise's Anthropic Messages proxy.", "正在将 Claude Code 接入 Qise 的 Anthropic Messages 代理。")
+        : tr(locale, "Patching agent config and starting Qise managed services.", "正在修改智能体配置并启动 Qise 管理的服务。"),
       async () => {
         const result = await invoke<CommandText>("protect_agent_with_options", {
           agent: agent.key,
-          baseUrl: "",
+          baseUrl,
           experimental: agent.experimental,
         });
         return requireCommandSuccess(result);

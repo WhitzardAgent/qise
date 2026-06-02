@@ -427,7 +427,7 @@ export default function ConfigPanel({ locale }: { locale: Locale }) {
           label={tr(locale, "Upstream URL", "上游地址")}
           value={config.integration.proxy.upstream_url ?? ""}
           onChange={(v) => updateProxy("upstream_url", v)}
-          placeholder="https://api.openai.com/v1"
+          placeholder="https://api.openai.com/v1 or https://api.anthropic.com"
         />
         <ConfigInput
           label={tr(locale, "Upstream API Key", "上游密钥")}

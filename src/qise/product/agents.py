@@ -27,7 +27,16 @@ from qise.product.service import (
 QISE_PROXY_PROVIDER = "qise-proxy"
 QISE_MARKER_START = "# >>> qise protect"
 QISE_MARKER_END = "# <<< qise protect"
-_JSON_BASE_URL_KEYS = {"base_url", "baseurl", "api_base", "apibaseurl", "api_base_url", "endpoint"}
+_JSON_BASE_URL_KEYS = {
+    "base_url",
+    "baseurl",
+    "api_base",
+    "apibaseurl",
+    "api_base_url",
+    "endpoint",
+    "anthropicbaseurl",
+    "anthropic_base_url",
+}
 _JSON_ENV_KEY_KEYS = {"env_key", "envkey", "api_key_env", "apikeyenv", "api_key_name", "apikeyname"}
 
 
@@ -73,8 +82,7 @@ AGENTS: dict[str, AgentSpec] = {
         cli_names=("claude",),
         config_paths=("~/.claude/settings.json",),
         config_format="json",
-        experimental=True,
-        note="Anthropic native API protection is experimental until /v1/messages support is implemented.",
+        note="Anthropic Messages API protection via local Qise proxy.",
     ),
 }
 
@@ -124,13 +132,40 @@ def _is_local_proxy_url(url: str, proxy_port: int) -> bool:
     return host in {"127.0.0.1", "localhost", "::1"} and port == proxy_port
 
 
-def _configured_upstream(config: ShieldConfig, *, override_url: str, proxy_port: int) -> UpstreamInfo:
+def _agent_api_key_env_candidates(agent_key: str) -> tuple[str, ...]:
+    if agent_key == "claude-code":
+        return ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY")
+    return ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+
+def _default_api_key_env_for_agent(agent_key: str) -> str:
+    return _agent_api_key_env_candidates(agent_key)[0]
+
+
+def _configured_upstream(
+    config: ShieldConfig,
+    *,
+    override_url: str,
+    proxy_port: int,
+    agent_key: str = "",
+) -> UpstreamInfo:
+    env_base_candidates = (
+        [
+            ("ANTHROPIC_BASE_URL", os.environ.get("ANTHROPIC_BASE_URL", "")),
+            ("OPENAI_API_BASE", os.environ.get("OPENAI_API_BASE", "")),
+        ]
+        if agent_key == "claude-code"
+        else [
+            ("OPENAI_API_BASE", os.environ.get("OPENAI_API_BASE", "")),
+            ("ANTHROPIC_BASE_URL", os.environ.get("ANTHROPIC_BASE_URL", "")),
+        ]
+    )
     candidates = [
         (override_url, "--base-url"),
         (config.integration.proxy.upstream_url, "shield.yaml integration.proxy.upstream_url"),
         (os.environ.get("QISE_PROXY_UPSTREAM_URL", ""), "QISE_PROXY_UPSTREAM_URL"),
-        (os.environ.get("OPENAI_API_BASE", ""), "OPENAI_API_BASE"),
     ]
+    candidates.extend((value, name) for name, value in env_base_candidates)
     base_url = ""
     source = ""
     for candidate, candidate_source in candidates:
@@ -148,9 +183,12 @@ def _configured_upstream(config: ShieldConfig, *, override_url: str, proxy_port:
     elif os.environ.get("QISE_PROXY_UPSTREAM_API_KEY"):
         api_key = os.environ["QISE_PROXY_UPSTREAM_API_KEY"]
         source = source or "QISE_PROXY_UPSTREAM_API_KEY"
-    elif os.environ.get("OPENAI_API_KEY"):
-        api_key_env = "OPENAI_API_KEY"
-        api_key = os.environ["OPENAI_API_KEY"]
+    else:
+        for candidate_env in _agent_api_key_env_candidates(agent_key):
+            if os.environ.get(candidate_env):
+                api_key_env = candidate_env
+                api_key = os.environ[candidate_env]
+                break
 
     return UpstreamInfo(base_url=base_url, api_key_env=api_key_env, api_key=api_key, source=source)
 
@@ -247,11 +285,11 @@ def render_agents(agents: list[dict[str, Any]], *, json_output: bool = False) ->
 
 
 class AgentConfigManager:
-    def __init__(self, spec: AgentSpec, *, proxy_port: int = 8822, proxy_env_key: str = "OPENAI_API_KEY") -> None:
+    def __init__(self, spec: AgentSpec, *, proxy_port: int = 8822, proxy_env_key: str = "") -> None:
         self.spec = spec
         self.proxy_port = proxy_port
         self.proxy_url = f"http://127.0.0.1:{proxy_port}/agent/{spec.key}/v1"
-        self.proxy_env_key = proxy_env_key or "OPENAI_API_KEY"
+        self.proxy_env_key = proxy_env_key or _default_api_key_env_for_agent(spec.key)
 
     def detect(self) -> dict[str, Any]:
         rows = {row["key"]: row for row in detect_agents()}
@@ -273,6 +311,8 @@ class AgentConfigManager:
         before = self.read_config(config_path)
         if not before.strip():
             return UpstreamInfo()
+        if self.spec.key == "claude-code":
+            return self._infer_claude_upstream(before, config_path)
         if self.spec.config_format == "toml" or config_path.suffix.lower() == ".toml":
             return self._infer_toml_upstream(before, config_path)
         return self._infer_json_upstream(before, config_path)
@@ -395,6 +435,31 @@ class AgentConfigManager:
             )
         return UpstreamInfo()
 
+    def _infer_claude_upstream(self, before: str, config_path: Path) -> UpstreamInfo:
+        try:
+            data = json.loads(before)
+        except json.JSONDecodeError:
+            return UpstreamInfo()
+        if not isinstance(data, dict):
+            return UpstreamInfo()
+
+        env = data.get("env", {})
+        base_url = ""
+        if isinstance(env, dict):
+            base_url = str(env.get("ANTHROPIC_BASE_URL") or env.get("CLAUDE_CODE_PROXY_URL") or "").rstrip("/")
+        if not base_url:
+            base_url, _ = self._find_json_upstream(data)
+
+        if base_url and not _is_local_proxy_url(base_url, self.proxy_port):
+            env_key = next((name for name in _agent_api_key_env_candidates(self.spec.key) if os.environ.get(name)), "")
+            return UpstreamInfo(
+                base_url=base_url,
+                api_key_env=env_key or _default_api_key_env_for_agent(self.spec.key),
+                api_key=_env_value(env_key),
+                source=str(config_path),
+            )
+        return UpstreamInfo()
+
     def _find_json_upstream(self, value: Any) -> tuple[str, str]:
         if isinstance(value, dict):
             base_url = ""
@@ -457,9 +522,19 @@ class AgentConfigManager:
         if not isinstance(data, dict):
             data = {"original_config": data}
         data.pop("qise", None)
+        if self.spec.key == "claude-code":
+            return self._patch_claude_json_data(data)
         patched = self._patch_json_base_urls(data)
         if not patched:
             data["base_url"] = self.proxy_url
+        return json.dumps(data, indent=2, sort_keys=True) + "\n"
+
+    def _patch_claude_json_data(self, data: dict[str, Any]) -> str:
+        env = data.get("env")
+        if not isinstance(env, dict):
+            env = {}
+            data["env"] = env
+        env["ANTHROPIC_BASE_URL"] = self.proxy_url
         return json.dumps(data, indent=2, sort_keys=True) + "\n"
 
     def _patch_json_base_urls(self, value: Any) -> bool:
@@ -489,7 +564,12 @@ def protect_agent(
     key = normalize_agent_key(agent)
     config, loaded_config_path = _load_config(config_path)
     proxy_port = config.integration.proxy.port
-    configured_upstream = _configured_upstream(config, override_url=base_url, proxy_port=proxy_port)
+    configured_upstream = _configured_upstream(
+        config,
+        override_url=base_url,
+        proxy_port=proxy_port,
+        agent_key=key,
+    )
 
     if key == "custom":
         if not configured_upstream.base_url:
@@ -519,7 +599,7 @@ def protect_agent(
     if spec.experimental and not experimental:
         return 2, (
             f"{spec.display_name} support is experimental. Re-run with --experimental to acknowledge "
-            "that native Anthropic /v1/messages interception is not implemented yet."
+            "that this integration has not completed the full verification matrix yet."
         )
 
     manager = AgentConfigManager(spec, proxy_port=proxy_port)
@@ -538,7 +618,12 @@ def protect_agent(
             "integration.proxy.upstream_url / QISE_PROXY_UPSTREAM_URL."
         )
 
-    proxy_env_key = upstream.api_key_env or inferred_upstream.api_key_env or state_upstream.api_key_env or "OPENAI_API_KEY"
+    proxy_env_key = (
+        upstream.api_key_env
+        or inferred_upstream.api_key_env
+        or state_upstream.api_key_env
+        or _default_api_key_env_for_agent(key)
+    )
     manager = AgentConfigManager(spec, proxy_port=proxy_port, proxy_env_key=proxy_env_key)
 
     state = load_state()

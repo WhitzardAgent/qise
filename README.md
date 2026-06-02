@@ -4,7 +4,7 @@
 
 **Local-first security for AI coding agents.**
 
-Qise helps you run agents such as Codex, OpenClaw, and OpenAI-compatible custom agents with a local safety layer that can scan integrations, route model traffic through a guard proxy, block risky actions, and leave an explainable event trail.
+Qise helps you run agents such as Codex, OpenClaw, Claude Code, and custom agents with a local safety layer that can scan integrations, route model traffic through a guard proxy, block risky actions, and leave an explainable event trail.
 
 [中文](./README_CN.md) | [Quickstart](./docs/quickstart.md) | [Install](./docs/install.md) | [Architecture](./docs/architecture.md) | [Privacy](./docs/privacy.md)
 
@@ -54,14 +54,14 @@ Qise is currently an alpha/MVP project. Source install is the recommended path u
 | Area | What works now | Status |
 | --- | --- | --- |
 | CLI | `doctor`, `status`, `agents`, `scan`, `check`, `events`, `protect`, `restore`, `stop`, `slm`, `run` | Active MVP |
-| Proxy protection | Local OpenAI-compatible proxy for Codex, OpenClaw, and custom agents | Active MVP |
+| Proxy protection | Local proxy for OpenAI-compatible `/v1/chat/completions` traffic and Anthropic `/v1/messages` traffic | Active MVP |
 | Preflight scan | Skill, MCP config, agent config, and detected agent asset scanning | Active MVP |
 | Guard engine | 14 guards across ingress, egress, and output pipelines | Active MVP |
 | Event log | Local JSONL events with risk, evidence, verdict, recommendation, and correlation IDs | Active MVP |
 | Local SLM | Optional semantic review layer through Ollama or custom OpenAI-compatible endpoint | Active MVP |
 | Runtime Observer | User-space wrapper for process, stdout/stderr, file diff, and best-effort network evidence | MVP |
 | Desktop app | Tauri 2 + React UI that calls the same Qise CLI | Source-build MVP |
-| Claude Code | Experimental only; native Anthropic `/v1/messages` proxy support is not complete | Experimental |
+| Claude Code | Native Anthropic `/v1/messages` proxy path with request/response parsing, security-context injection, and streaming `tool_use` checks | Active MVP |
 
 ## Project Shape
 
@@ -71,7 +71,7 @@ The repository is split into a few clear layers:
 src/qise/              Python product engine, CLI, proxy, bridge, guards, adapters
 src/qise/guards/       Prompt, command, credential, filesystem, network, exfil, and other guards
 src/qise/product/      User-facing product flows: protect, restore, scan, status, doctor, events, SLM
-src/qise/proxy/        OpenAI-compatible local proxy and streaming support
+src/qise/proxy/        OpenAI-compatible and Anthropic Messages local proxy and streaming support
 src/qise/bridge/       Local bridge used by the desktop UI for guard state
 src/qise/adapters/     SDK/framework snippets and integrations
 src-ui/                React + TypeScript desktop frontend
@@ -91,7 +91,7 @@ For the CLI:
 
 - Python 3.11 or newer.
 - macOS or Linux shell for the current demo scripts.
-- A real agent install only if you want to protect a real Codex/OpenClaw/custom agent.
+- A real agent install only if you want to protect a real Codex/OpenClaw/Claude Code/custom agent.
 
 For the desktop app from source:
 
@@ -203,7 +203,7 @@ Protection means Qise backs up your agent config, patches the agent's model base
 Before protecting a real agent, make sure:
 
 - Your agent already works without Qise.
-- Your model provider API key is still available in the environment your agent uses, for example `OPENAI_API_KEY`.
+- Your model provider API key is still available in the environment your agent uses, for example `OPENAI_API_KEY` for OpenAI-compatible agents or `ANTHROPIC_API_KEY` for Claude Code.
 - You know the upstream model API base URL if Qise cannot infer it from the agent config.
 
 Protect Codex:
@@ -233,6 +233,22 @@ Protect OpenClaw:
 ```bash
 qise protect openclaw
 ```
+
+Protect Claude Code:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+qise protect claude-code --base-url https://api.anthropic.com
+qise status
+```
+
+What happens:
+
+| Command | What it does |
+| --- | --- |
+| `export ANTHROPIC_API_KEY=...` | Keeps your Anthropic provider key available to Claude Code and to the Qise-managed proxy process. If you already use an `apiKeyHelper`, keep using it; Qise can also preserve the key sent by Claude Code. |
+| `qise protect claude-code --base-url https://api.anthropic.com` | Backs up `~/.claude/settings.json`, sets `env.ANTHROPIC_BASE_URL` to the local Qise proxy, records the original Anthropic upstream, and starts Qise services. |
+| `qise status` | Confirms Claude Code is protected and shows the backup path. |
 
 Protect a custom OpenAI-compatible agent:
 
@@ -284,7 +300,7 @@ Qise keeps backups under `~/.qise/backups/` after restore so you can inspect wha
 | `qise run --agent <name> -- <cmd>` | Run a command under the Runtime Observer. |
 | `qise guards` | List registered guards, pipelines, strategies, and modes. |
 | `qise context <tool>` | Preview security context text for a tool. |
-| `qise proxy start` | Start the local OpenAI-compatible proxy manually. |
+| `qise proxy start` | Start the local OpenAI-compatible/Anthropic proxy manually. |
 | `qise bridge start` | Start the local bridge used by desktop/guard control flows. |
 | `qise serve --transport stdio` | Start Qise as an MCP server. |
 | `qise adapters <name>` | Print SDK integration snippets for supported frameworks. |
@@ -447,7 +463,7 @@ qise adapters hermes
 qise adapters nexau
 ```
 
-Use adapters when you are building an agent and want in-process checks around tools, inputs, outputs, or framework hooks. Use proxy mode when you want zero-code protection for an existing OpenAI-compatible agent.
+Use adapters when you are building an agent and want in-process checks around tools, inputs, outputs, or framework hooks. Use proxy mode when you want zero-code protection for an existing OpenAI-compatible agent or Claude Code.
 
 ## Configuration
 
@@ -469,6 +485,9 @@ Common environment variables:
 | `QISE_PROXY_UPSTREAM_API_KEY` | Upstream model API key passed to Qise proxy. |
 | `OPENAI_API_BASE` | Fallback upstream base URL. |
 | `OPENAI_API_KEY` | Common provider API key env used by agents and Qise. |
+| `ANTHROPIC_BASE_URL` | Anthropic upstream base URL used by Claude Code or native Anthropic clients. |
+| `ANTHROPIC_API_KEY` | Anthropic API key. Qise forwards it as `X-Api-Key` for `/v1/messages`. |
+| `ANTHROPIC_AUTH_TOKEN` | Anthropic auth token. Qise forwards it as `Authorization: Bearer ...` for `/v1/messages`. |
 | `QISE_SLM_BASE_URL` | Override SLM endpoint. |
 | `QISE_SLM_MODEL` | Override SLM model name. |
 | `QISE_BINARY` | Desktop app override for the Qise executable. |
@@ -510,6 +529,14 @@ Pass the upstream explicitly:
 qise protect codex --base-url https://api.openai.com/v1
 ```
 
+`qise protect claude-code` cannot infer the Anthropic upstream.
+
+Pass it explicitly:
+
+```bash
+qise protect claude-code --base-url https://api.anthropic.com
+```
+
 Qise patched an agent and you want to undo it.
 
 ```bash
@@ -542,8 +569,7 @@ qise events --limit 5
 ## Current Limitations
 
 - Source install is the main supported install path until package publishing is finished.
-- Proxy mode currently targets OpenAI-compatible chat/completions-style traffic.
-- Claude Code support is experimental because native Anthropic `/v1/messages` interception is not complete.
+- Proxy mode currently targets OpenAI-compatible chat/completions traffic and Anthropic Messages `/v1/messages` traffic.
 - Runtime Observer is a user-space wrapper, not OS/kernel-level auditing.
 - Desktop app packaging is source-build oriented in the current MVP.
 - Local SLM quality and latency depend on the model and server you choose.
@@ -556,7 +582,7 @@ qise events --limit 5
 - [Guards](./docs/guards.md)
 - [Codex integration](./docs/codex.md)
 - [OpenClaw integration](./docs/openclaw.md)
-- [Claude Code status](./docs/claude-code.md)
+- [Claude Code integration](./docs/claude-code.md)
 - [Preflight scan](./docs/preflight-scan.md)
 - [Events](./docs/events.md)
 - [Runtime Observer](./docs/runtime-observer.md)
