@@ -289,7 +289,9 @@ fn bundled_qise_path() -> Option<PathBuf> {
 
     let candidates = [
         exe_dir.join("../Resources/bin/qise"),
+        exe_dir.join("bin/qise.exe"),
         exe_dir.join("bin/qise"),
+        manifest_dir.join("resources/bin/qise.exe"),
         manifest_dir.join("resources/bin/qise"),
     ];
 

@@ -1,0 +1,21 @@
+{
+  "build": {
+    "beforeBuildCommand": "python scripts/build-desktop-runtime.py && npm --prefix src-ui run build"
+  },
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "resources": {
+      "resources/bin/qise.exe": "bin/qise.exe"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
