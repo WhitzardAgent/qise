@@ -55,7 +55,7 @@ Qise is local-first. Product state, backups, and events are stored under `~/.qis
 
 ## Current Status
 
-Qise is currently an alpha/MVP project. macOS desktop packaging can be built from source. PyPI and signed release distribution are still release-process work.
+Qise is currently an alpha/MVP project. The macOS app can be built on macOS, and a Windows test installer can be built by a GitHub Actions Windows runner. PyPI publishing, installer signing, and formal release distribution are still release-process work.
 
 | Area | What works now | Status |
 | --- | --- | --- |
@@ -74,16 +74,33 @@ Qise is currently an alpha/MVP project. macOS desktop packaging can be built fro
 
 The desktop app is the easiest way to try Qise as a product. It gives you pages for protection status, agent detection, one-click protection, preflight scanning, event logs, guard rules, local SLM setup, backups, diagnostics, and SDK snippets.
 
-### Option A: Install A Prebuilt macOS DMG
+### Option A: Install A Prebuilt App From The Repository
 
-When a release DMG is attached to GitHub Releases:
+Test installers are stored under:
 
-1. Download the macOS DMG, for example `Qise_0.2.0_aarch64.dmg`.
-2. Double-click the DMG.
-3. Drag `Qise.app` into `Applications`.
-4. Open `Qise.app`.
+```text
+installers/
+├── macos/
+│   └── Qise_0.2.0_aarch64.dmg
+└── windows/
+    └── Qise_0.2.0_x64-setup.exe
+```
+
+On macOS:
+
+1. Open `installers/macos/Qise_0.2.0_aarch64.dmg`.
+2. Drag `Qise.app` into `Applications`.
+3. Open `Qise.app`.
 
 If macOS blocks the first launch because the build is not notarized yet, right-click `Qise.app`, choose `Open`, then confirm. You can also allow it from `System Settings -> Privacy & Security`.
+
+On Windows:
+
+1. Open `Qise_*_x64-setup.exe` under `installers/windows/`.
+2. Complete the installer wizard.
+3. Open Qise from the Start menu.
+
+The Windows test installer is not signed yet, so Windows SmartScreen may show an unknown-publisher warning.
 
 ### Option B: Build The macOS App From Source
 
@@ -135,6 +152,27 @@ src-tauri/resources/bin/qise
 ```
 
 That binary is a generated build artifact and should not be committed.
+
+### Option C: Build The Windows EXE With GitHub Actions
+
+The Windows installer must be generated in a Windows environment. After the project is pushed to the GitHub `main` branch, `.github/workflows/windows-desktop.yml`:
+
+1. Installs Python, Node.js, and Rust on a GitHub `windows-latest` runner.
+2. Builds the bundled `qise.exe` runtime with PyInstaller.
+3. Builds the NSIS `Qise_*_x64-setup.exe` with Tauri.
+4. Uploads the installer as an Actions artifact.
+5. Commits the installer back to `installers/windows/`.
+
+Before the first build, open `Settings -> Actions -> General -> Workflow permissions` in the GitHub repository and select `Read and write permissions`. If `main` is protected, allow GitHub Actions to write to it or download the artifact manually from the Actions page.
+
+After the workflow succeeds and commits the installer, update the local checkout:
+
+```bash
+git pull --ff-only origin main
+ls -lh installers/windows
+```
+
+GitHub limits ordinary Git files to 100 MiB each. Use GitHub Releases or Git LFS if an installer exceeds that limit.
 
 ### Run The Desktop App In Development Mode
 
@@ -597,11 +635,11 @@ qise events --limit 5
 
 ## Current Limitations
 
-- Source install and source-built desktop packages are the main supported paths until package publishing and signed releases are finished.
+- The macOS and Windows installers in this repository are currently unsigned test builds.
 - Proxy mode currently targets OpenAI-compatible chat/completions traffic and Anthropic Messages `/v1/messages` traffic.
 - Runtime Observer is a user-space wrapper, not OS/kernel-level auditing.
 - Local SLM quality and latency depend on the model and server you choose.
-- This README focuses on macOS desktop packaging for now. Windows packaging is not documented here yet.
+- The Windows EXE is produced by a GitHub Actions Windows runner and cannot be installation-tested directly on macOS.
 
 ## Learn More
 
