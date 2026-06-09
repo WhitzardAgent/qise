@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-windows:
     name: Windows x64 NSIS
@@ -50,7 +54,8 @@ jobs:
         run: npm ci --prefix src-ui
 
       - name: Build Windows installer
-        run: .\src-ui\node_modules\.bin\tauri.cmd build --bundles nsis
+        working-directory: src-tauri
+        run: ..\src-ui\node_modules\.bin\tauri.cmd build --bundles nsis
 
       - name: Copy installer into repository folder
         shell: pwsh

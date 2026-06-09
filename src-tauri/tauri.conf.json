@@ -5,8 +5,14 @@
   "build": {
     "frontendDist": "../src-ui/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm --prefix src-ui run dev",
-    "beforeBuildCommand": "scripts/build-desktop-runtime.sh && npm --prefix src-ui run build"
+    "beforeDevCommand": {
+      "script": "npm --prefix src-ui run dev",
+      "cwd": ".."
+    },
+    "beforeBuildCommand": {
+      "script": "scripts/build-desktop-runtime.sh && npm --prefix src-ui run build",
+      "cwd": ".."
+    }
   },
   "app": {
     "windows": [

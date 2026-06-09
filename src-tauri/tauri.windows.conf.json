@@ -1,6 +1,9 @@
 {
   "build": {
-    "beforeBuildCommand": "python scripts/build-desktop-runtime.py && npm --prefix src-ui run build"
+    "beforeBuildCommand": {
+      "script": "python scripts/build-desktop-runtime.py && npm --prefix src-ui run build",
+      "cwd": ".."
+    }
   },
   "bundle": {
     "targets": [
