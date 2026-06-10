@@ -145,15 +145,8 @@ To install the locally built app:
 2. Drag `Qise.app` into `Applications`.
 3. Open `Qise.app`.
 
-The build also creates an internal CLI runtime at:
 
-```text
-src-tauri/resources/bin/qise
-```
-
-That binary is a generated build artifact and should not be committed.
-
-### Option C: Build The Windows EXE With GitHub Actions
+<!-- ### Option C: Build The Windows EXE With GitHub Actions
 
 The Windows installer must be generated in a Windows environment. After the project is pushed to the GitHub `main` branch, `.github/workflows/windows-desktop.yml`:
 
@@ -172,7 +165,7 @@ git pull --ff-only origin main
 ls -lh installers/windows
 ```
 
-GitHub limits ordinary Git files to 100 MiB each. Use GitHub Releases or Git LFS if an installer exceeds that limit.
+GitHub limits ordinary Git files to 100 MiB each. Use GitHub Releases or Git LFS if an installer exceeds that limit. -->
 
 ### Run The Desktop App In Development Mode
 
@@ -224,10 +217,10 @@ cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[proxy]"
-qise doctor
+qise doctor # Checks Python, Qise import, config, local ports, event log, optional SLM, and detected agents.
 ```
 
-What each command does:
+<!-- What each command does:
 
 | Command | Why you run it |
 | --- | --- |
@@ -236,7 +229,7 @@ What each command does:
 | `python3.11 -m venv .venv` | Creates a clean Python environment. |
 | `source .venv/bin/activate` | Activates that environment. |
 | `pip install -e ".[proxy]"` | Installs Qise in editable mode with proxy runtime dependencies. |
-| `qise doctor` | Checks Python, Qise import, config, local ports, event log, optional SLM, and detected agents. |
+| `qise doctor` | Checks Python, Qise import, config, local ports, event log, optional SLM, and detected agents. | -->
 
 For development and tests:
 
@@ -505,14 +498,14 @@ agent = Agent(
 
 Use adapters when you are building an agent and want in-process checks around tools, inputs, outputs, or framework hooks. Use proxy mode when you want zero-code protection for an existing OpenAI-compatible agent or Claude Code.
 
-## Integration Modes
+<!-- ## Integration Modes
 
 | Mode | Code required | Best for |
 | --- | --- | --- |
 | Desktop app | 0 lines | Regular users who want a visual control panel. |
 | Proxy mode | 0 lines | Existing agents that can point model traffic to a local base URL. |
 | MCP mode | 0 lines | Agents that can call Qise as an MCP server. |
-| SDK mode | 1-5 lines | Developers building agent frameworks or custom tools. |
+| SDK mode | 1-5 lines | Developers building agent frameworks or custom tools. | -->
 
 ## Project Shape
 

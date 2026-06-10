@@ -145,15 +145,8 @@ DMG 文件名中的版本号和 CPU 架构可能会变化。Apple Silicon 上通
 2. 把 `Qise.app` 拖进 `Applications`。
 3. 打开 `Qise.app`。
 
-构建过程还会生成内置 CLI runtime：
 
-```text
-src-tauri/resources/bin/qise
-```
-
-这个二进制文件是构建产物，不应该提交到 Git。
-
-### 方式 C：通过 GitHub Actions 构建 Windows EXE
+<!-- ### 方式 C：通过 GitHub Actions 构建 Windows EXE
 
 Windows 安装包必须在 Windows 环境中生成。将项目推送到 GitHub 的 `main` 分支后，`.github/workflows/windows-desktop.yml` 会：
 
@@ -172,7 +165,7 @@ git pull --ff-only origin main
 ls -lh installers/windows
 ```
 
-普通 GitHub 仓库单个文件限制为 100 MiB。如果安装包超过该大小，应改用 GitHub Releases 或 Git LFS。
+普通 GitHub 仓库单个文件限制为 100 MiB。如果安装包超过该大小，应改用 GitHub Releases 或 Git LFS。 -->
 
 ### 以开发模式运行桌面应用
 
@@ -224,10 +217,10 @@ cd qise
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[proxy]"
-qise doctor
+qise doctor # 检查 Python、Qise import、配置、本地端口、事件日志、可选 SLM 和已检测 Agent。
 ```
 
-每条命令的作用：
+<!-- 每条命令的作用：
 
 | 命令 | 为什么运行它 |
 | --- | --- |
@@ -236,7 +229,7 @@ qise doctor
 | `python3.11 -m venv .venv` | 创建一个干净的 Python 环境。 |
 | `source .venv/bin/activate` | 激活这个环境。 |
 | `pip install -e ".[proxy]"` | 以 editable 模式安装 Qise，并安装 proxy 运行时依赖。 |
-| `qise doctor` | 检查 Python、Qise import、配置、本地端口、事件日志、可选 SLM 和已检测 Agent。 |
+| `qise doctor` | 检查 Python、Qise import、配置、本地端口、事件日志、可选 SLM 和已检测 Agent。 | -->
 
 如果要开发和跑测试：
 
@@ -505,14 +498,14 @@ agent = Agent(
 
 如果你正在开发 Agent，并希望在工具、输入、输出或框架 hook 周围做进程内检查，使用 adapter。若你希望零代码保护一个现有 OpenAI-compatible Agent 或 Claude Code，则优先使用 proxy 模式。
 
-## 集成模式
+<!-- ## 集成模式
 
 | 模式 | 需要写代码吗 | 适合谁 |
 | --- | --- | --- |
 | 桌面应用 | 0 行 | 希望用可视化控制台的普通用户。 |
 | Proxy mode | 0 行 | 可以把模型流量指向本地 base URL 的现有 Agent。 |
 | MCP mode | 0 行 | 可以把 Qise 作为 MCP server 调用的 Agent。 |
-| SDK mode | 1-5 行 | 正在构建 Agent 框架或自定义工具的开发者。 |
+| SDK mode | 1-5 行 | 正在构建 Agent 框架或自定义工具的开发者。 | -->
 
 ## 项目结构
 
