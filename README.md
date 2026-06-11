@@ -1,8 +1,8 @@
 <div align="center">
 
-# <img src=src-tauri/icons/logo.png width="18%"/> Qise
+<img src=src-tauri/icons/logo-2.png width="36%"/> 
 
-**Local-first security for AI coding agents.**
+**Local-First Security for AI Agents.**
 
 Qise helps you use agents such as Codex, OpenClaw, Claude Code, and custom agents with a local safety layer. It can scan risky integrations, route model traffic through a guard proxy, block dangerous actions, and show a readable local event trail.
 
