@@ -14,19 +14,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 tokio = { version = "1", features = ["full"] }
-axum = "0.8"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
-tower = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-hyper = { version = "1", features = ["client", "http1", "http2"] }
-tower-http = { version = "0.6", features = ["cors"] }
-bytes = "1"
-futures = "0.3"
-tokio-stream = "0.1"
 libc = "0.2"

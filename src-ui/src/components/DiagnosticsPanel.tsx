@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppStatus, normalizeStatus, slmLabel } from "../lib/api";
+import { AppStatus, normalizeStatus, slmLabel, statusProtectionEnabled } from "../lib/api";
 import { portStatusLabel, slmStatusLabel, statusWord, tr, type Locale } from "../lib/locale";
 
 interface DoctorCheck {
@@ -129,7 +129,7 @@ export default function DiagnosticsPanel({ locale }: { locale: Locale }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-          <DetailRow locale={locale} label={tr(locale, "Protection", "保护状态")} value={Object.keys(status?.protected_agents ?? {}).length > 0 ? statusWord(locale, "protected") : statusWord(locale, "unprotected")} />
+          <DetailRow locale={locale} label={tr(locale, "Protection", "保护状态")} value={statusProtectionEnabled(status) ? statusWord(locale, "protected") : statusWord(locale, "unprotected")} />
           <DetailRow locale={locale} label={tr(locale, "Proxy", "代理")} value={status ? portStatusLabel(locale, status.proxy, status.proxy_port ?? 8822) : proxy?.detail ?? ""} tone={proxy?.status} />
           <DetailRow locale={locale} label={tr(locale, "Bridge", "桥接")} value={status ? portStatusLabel(locale, status.bridge, status.bridge_port ?? 8823) : bridge?.detail ?? ""} tone={bridge?.status} />
           <DetailRow locale={locale} label={tr(locale, "Config", "配置")} value={status?.config ?? config?.detail ?? ""} tone={config?.status} />

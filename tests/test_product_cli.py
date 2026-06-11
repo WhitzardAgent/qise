@@ -44,6 +44,30 @@ def test_status_runs_without_services(tmp_path: Path) -> None:
     assert "Protected agents" in result.stdout
 
 
+def test_status_marks_stale_service_records_inactive(tmp_path: Path) -> None:
+    config = tmp_path / "shield.yaml"
+    config.write_text('version: "1.0"\nintegration:\n  proxy:\n    port: 54321\n')
+    home = tmp_path / "qise-home"
+    home.mkdir()
+    (home / "state.json").write_text(json.dumps({
+        "services": {
+            "proxy": {"pid": 999_991, "port": 54321, "status": "running", "managed_by": "qise"},
+            "bridge": {"pid": 999_992, "port": 54322, "status": "running", "managed_by": "qise"},
+        },
+        "protected_agents": {
+            "codex": {"proxy_url": "http://127.0.0.1:54321/agent/codex/v1"},
+        },
+    }))
+
+    result = _run(["--config", str(config), "status", "--json"], tmp_path)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["protection_enabled"] is False
+    assert payload["services"]["proxy"]["status"] == "stale"
+    assert payload["services"]["bridge"]["status"] == "stale"
+
+
 def test_agents_detects_only_installed_agents(tmp_path: Path) -> None:
     agent_home = tmp_path / "agent-home"
     claude_config = agent_home / ".claude" / "settings.json"

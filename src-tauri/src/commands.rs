@@ -45,7 +45,10 @@ pub async fn get_doctor() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_slm_status() -> Result<Value, String> {
-    qise_cli::run_json_permissive(qise_cli::args_with_default_config(&["slm", "status", "--json"])).await
+    qise_cli::run_json_permissive(qise_cli::args_with_default_config(&[
+        "slm", "status", "--json",
+    ]))
+    .await
 }
 
 #[tauri::command]
@@ -220,17 +223,25 @@ pub async fn get_adapter_snippet(adapter: String) -> Result<String, String> {
         "nanobot" | "hermes" | "nexau" | "langgraph" | "openai-agents" => adapter,
         _ => return Err(format!("Unsupported adapter: {}", adapter)),
     };
-    Ok(qise_cli::run(qise_cli::args(&["adapters", &adapter])).await?.stdout)
+    Ok(qise_cli::run(qise_cli::args(&["adapters", &adapter]))
+        .await?
+        .stdout)
 }
 
 #[tauri::command]
 pub async fn stop_qise_services() -> Result<CommandText, String> {
-    Ok(qise_cli::run_permissive(qise_cli::args(&["stop"])).await?.into())
+    Ok(qise_cli::run_permissive(qise_cli::args(&["stop"]))
+        .await?
+        .into())
 }
 
 #[tauri::command]
 pub async fn restore_all_agents() -> Result<CommandText, String> {
-    Ok(qise_cli::run_permissive(qise_cli::args(&["restore", "all"])).await?.into())
+    Ok(
+        qise_cli::run_permissive(qise_cli::args(&["restore", "all"]))
+            .await?
+            .into(),
+    )
 }
 
 #[tauri::command]
@@ -276,7 +287,8 @@ pub async fn restore_agent(agent: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn get_takeover_status() -> Result<Value, String> {
-    let status = qise_cli::run_json(qise_cli::args_with_default_config(&["status", "--json"])).await?;
+    let status =
+        qise_cli::run_json(qise_cli::args_with_default_config(&["status", "--json"])).await?;
     Ok(status
         .get("protected_agents")
         .cloned()
@@ -322,20 +334,19 @@ pub async fn set_guard_mode(
 
     let bridge_url = format!("http://127.0.0.1:{}", bridge_port);
     let client = crate::guard_client::GuardClient::new(&bridge_url, 5);
-    client.set_guard_mode(&guard_name, &mode).await.map_err(|e| {
-        format!(
-            "Guard mode can only be changed while the Qise bridge is running. Bridge error: {}",
-            e
-        )
-    })
+    client
+        .set_guard_mode(&guard_name, &mode)
+        .await
+        .map_err(|e| {
+            format!(
+                "Guard mode can only be changed while the Qise bridge is running. Bridge error: {}",
+                e
+            )
+        })
 }
 
 #[tauri::command]
-pub async fn toggle_protection(
-    enable: bool,
-    state: State<'_, SharedState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn toggle_protection(enable: bool) -> Result<(), String> {
     if enable {
         return Err(
             "Desktop no longer starts an embedded proxy without an upstream. Use Protect on an installed Agent; Qise will start managed services when protection succeeds."
@@ -343,22 +354,8 @@ pub async fn toggle_protection(
         );
     }
 
-    let (proxy_handle, bridge_handle) = {
-        let mut s = state.lock().await;
-        s.protection_enabled = false;
-        (s.proxy_handle.take(), s.bridge_handle.take())
-    };
-
-    if let Some(handle) = proxy_handle {
-        crate::proxy::stop_proxy(handle).await?;
-    }
-    if let Some(handle) = bridge_handle {
-        crate::bridge::stop_bridge(handle).await?;
-    }
-
     qise_cli::run(qise_cli::args(&["stop"])).await?;
     qise_cli::run(qise_cli::args(&["restore", "all"])).await?;
-    crate::tray::update_tray_menu(&app, false);
     Ok(())
 }
 
@@ -403,12 +400,11 @@ pub async fn save_config(config: Value, state: State<'_, SharedState>) -> Result
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
-    let yaml_str = serde_yaml::to_string(&config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let yaml_str =
+        serde_yaml::to_string(&config).map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     let temp_path = format!("{}.tmp", config_path);
-    std::fs::write(&temp_path, &yaml_str)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    std::fs::write(&temp_path, &yaml_str).map_err(|e| format!("Failed to write config: {}", e))?;
     std::fs::rename(&temp_path, &config_path).map_err(|e| {
         let _ = std::fs::remove_file(&temp_path);
         format!("Failed to rename config file: {}", e)
@@ -517,19 +513,89 @@ fn default_config() -> Value {
 
 fn default_guards() -> Vec<GuardInfo> {
     vec![
-        GuardInfo { name: "prompt".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "tool_sanity".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "context".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "supply_chain".into(), mode: "observe".into(), pipeline: "ingress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "command".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "reasoning".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "filesystem".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "network".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "exfil".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "ai".into() },
-        GuardInfo { name: "resource".into(), mode: "observe".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "tool_policy".into(), mode: "enforce".into(), pipeline: "egress".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "credential".into(), mode: "enforce".into(), pipeline: "output".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "audit".into(), mode: "observe".into(), pipeline: "output".into(), primary_strategy: "rules".into() },
-        GuardInfo { name: "output".into(), mode: "observe".into(), pipeline: "output".into(), primary_strategy: "ai".into() },
+        GuardInfo {
+            name: "prompt".into(),
+            mode: "observe".into(),
+            pipeline: "ingress".into(),
+            primary_strategy: "ai".into(),
+        },
+        GuardInfo {
+            name: "tool_sanity".into(),
+            mode: "observe".into(),
+            pipeline: "ingress".into(),
+            primary_strategy: "ai".into(),
+        },
+        GuardInfo {
+            name: "context".into(),
+            mode: "observe".into(),
+            pipeline: "ingress".into(),
+            primary_strategy: "ai".into(),
+        },
+        GuardInfo {
+            name: "supply_chain".into(),
+            mode: "observe".into(),
+            pipeline: "ingress".into(),
+            primary_strategy: "ai".into(),
+        },
+        GuardInfo {
+            name: "command".into(),
+            mode: "enforce".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "reasoning".into(),
+            mode: "observe".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "ai".into(),
+        },
+        GuardInfo {
+            name: "filesystem".into(),
+            mode: "enforce".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "network".into(),
+            mode: "enforce".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "exfil".into(),
+            mode: "observe".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "ai".into(),
+        },
+        GuardInfo {
+            name: "resource".into(),
+            mode: "observe".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "tool_policy".into(),
+            mode: "enforce".into(),
+            pipeline: "egress".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "credential".into(),
+            mode: "enforce".into(),
+            pipeline: "output".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "audit".into(),
+            mode: "observe".into(),
+            pipeline: "output".into(),
+            primary_strategy: "rules".into(),
+        },
+        GuardInfo {
+            name: "output".into(),
+            mode: "observe".into(),
+            pipeline: "output".into(),
+            primary_strategy: "ai".into(),
+        },
     ]
 }

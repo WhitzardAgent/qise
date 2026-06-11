@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from typing import Any, Literal
 
@@ -49,6 +50,7 @@ class ModelResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 _JSON_BLOCK_RE = re.compile(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", re.DOTALL)
+_UNAVAILABLE_RETRY_SECONDS = 5.0
 
 
 def _parse_json_response(text: str) -> dict[str, Any]:
@@ -181,6 +183,9 @@ class ModelRouter:
         self.slm_config = slm_config or ModelConfig()
         self.llm_config = llm_config or ModelConfig()
         self.embedding_config = embedding_config or ModelConfig()
+        self._availability_lock = threading.Lock()
+        self._unavailable_until: dict[str, float] = {}
+        self._unavailable_reason: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Availability check
@@ -213,7 +218,25 @@ class ModelRouter:
                 f"Set base_url and model to enable {model_type} checks. "
                 f"Falling back to rule-based checks."
             )
+        with self._availability_lock:
+            retry_at = self._unavailable_until.get(model_type, 0.0)
+            reason = self._unavailable_reason.get(model_type, "endpoint unavailable")
+        if time.monotonic() < retry_at:
+            raise ModelUnavailableError(
+                f"{model_type.upper()} temporarily unavailable: {reason}. "
+                "Falling back to rule-based checks."
+            )
         return config
+
+    def _mark_unavailable(self, model_type: str, reason: str) -> None:
+        with self._availability_lock:
+            self._unavailable_until[model_type] = time.monotonic() + _UNAVAILABLE_RETRY_SECONDS
+            self._unavailable_reason[model_type] = reason
+
+    def _mark_available(self, model_type: str) -> None:
+        with self._availability_lock:
+            self._unavailable_until.pop(model_type, None)
+            self._unavailable_reason.pop(model_type, None)
 
     # ------------------------------------------------------------------
     # SLM methods
@@ -245,14 +268,17 @@ class ModelRouter:
             )
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            self._mark_unavailable("slm", str(exc))
             raise ModelUnavailableError(
                 f"SLM connection failed: {exc}. Falling back to rules."
             ) from exc
         except httpx.HTTPStatusError as exc:
+            self._mark_unavailable("slm", f"HTTP {exc.response.status_code}")
             raise ModelUnavailableError(
                 f"SLM returned HTTP {exc.response.status_code}. Falling back to rules."
             ) from exc
 
+        self._mark_available("slm")
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
         content = _extract_content_from_response(data)
@@ -278,14 +304,17 @@ class ModelRouter:
                 )
                 resp.raise_for_status()
             except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                self._mark_unavailable("slm", str(exc))
                 raise ModelUnavailableError(
                     f"SLM connection failed: {exc}. Falling back to rules."
                 ) from exc
             except httpx.HTTPStatusError as exc:
+                self._mark_unavailable("slm", f"HTTP {exc.response.status_code}")
                 raise ModelUnavailableError(
                     f"SLM returned HTTP {exc.response.status_code}. Falling back to rules."
                 ) from exc
 
+        self._mark_available("slm")
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
         content = _extract_content_from_response(data)
@@ -349,14 +378,17 @@ class ModelRouter:
             )
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            self._mark_unavailable("llm", str(exc))
             raise ModelUnavailableError(
                 f"LLM connection failed: {exc}. Falling back to rules."
             ) from exc
         except httpx.HTTPStatusError as exc:
+            self._mark_unavailable("llm", f"HTTP {exc.response.status_code}")
             raise ModelUnavailableError(
                 f"LLM returned HTTP {exc.response.status_code}. Falling back to rules."
             ) from exc
 
+        self._mark_available("llm")
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
         content = _extract_content_from_response(data)
@@ -399,14 +431,17 @@ class ModelRouter:
                 )
                 resp.raise_for_status()
             except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                self._mark_unavailable("llm", str(exc))
                 raise ModelUnavailableError(
                     f"LLM connection failed: {exc}. Falling back to rules."
                 ) from exc
             except httpx.HTTPStatusError as exc:
+                self._mark_unavailable("llm", f"HTTP {exc.response.status_code}")
                 raise ModelUnavailableError(
                     f"LLM returned HTTP {exc.response.status_code}. Falling back to rules."
                 ) from exc
 
+        self._mark_available("llm")
         latency_ms = int((time.monotonic() - start) * 1000)
         data = resp.json()
         content = _extract_content_from_response(data)

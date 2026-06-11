@@ -13,7 +13,9 @@ from qise.product.service import (
     DEFAULT_BRIDGE_PORT,
     check_port,
     events_path,
+    inspect_services,
     load_state,
+    services_are_active,
     state_path,
 )
 from qise.product.slm import slm_status
@@ -31,8 +33,9 @@ def load_config(config_path: str | None = None) -> tuple[ShieldConfig, str]:
 def get_status(config_path: str | None = None) -> dict[str, Any]:
     config, config_label = load_config(config_path)
     state = load_state()
+    services = inspect_services(state)
     proxy_port = config.integration.proxy.port
-    bridge_port = int(state.get("services", {}).get("bridge", {}).get("port", DEFAULT_BRIDGE_PORT))
+    bridge_port = int(services.get("bridge", {}).get("port", DEFAULT_BRIDGE_PORT))
     blocks, warnings = count_recent_events()
     events = load_events(limit=1)
 
@@ -40,11 +43,12 @@ def get_status(config_path: str | None = None) -> dict[str, Any]:
         "config": config_label,
         "state_path": str(state_path()),
         "events_path": str(events_path()),
-        "services": state.get("services", {}),
+        "services": services,
         "proxy": check_port("127.0.0.1", proxy_port).__dict__,
         "bridge": check_port("127.0.0.1", bridge_port).__dict__,
         "slm": slm_status(config_path=config_path),
         "protected_agents": state.get("protected_agents", {}),
+        "protection_enabled": services_are_active(services),
         "detected_agents": detect_agents(),
         "events_24h": {
             "blocked": blocks,
@@ -69,7 +73,7 @@ def render_status(status: dict[str, Any], *, json_output: bool = False) -> str:
         proxy_state = "listening"
     if status["bridge"]["status"] == "in_use" and bridge_state == "in_use":
         bridge_state = "listening"
-    qise_running = bool(services) or status["proxy"]["status"] == "in_use" or status["bridge"]["status"] == "in_use"
+    qise_running = bool(status.get("protection_enabled"))
     slm = status.get("slm", {})
     slm_ready = slm.get("verification") == "ready"
     lines = [

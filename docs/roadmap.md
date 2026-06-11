@@ -39,28 +39,34 @@
 - Architecture fixes: fallback strategy, threshold accumulation, default modes, soft-hard linkage
 - CLI: 8 subcommands (check, serve, proxy, init, adapters, context, guards, version)
 - 4 real-world integration examples
-- 393 tests
+- 500+ automated tests
 - License: CC BY-NC-SA 4.0
+
+### Phase 4: Desktop App + Product Runtime ✅
+
+#### Desktop App (Tauri 2)
+- System tray and desktop dashboard
+- Agent detection, one-click protection, backup, and restore
+- Preflight scanning for Agent configs, Skills, and MCP assets
+- Security event, guard policy, SLM, diagnostics, and SDK views
+- Shared Python product engine for CLI and desktop behavior
+- macOS and Windows installer build pipelines
+
+#### Product Runtime
+- Python HTTP proxy and Bridge managed by the Qise CLI
+- Automatic Agent configuration backup and proxy takeover
+- Runtime state validation and stale-service recovery
 
 ---
 
 ## Planned
 
-### Phase 4: Desktop App + Advanced Features
+### Phase 5: Advanced Features
 
-#### Desktop App (Tauri 2)
-- System tray with one-click toggle, status indicator, blocked event count
-- Main window with Guard Dashboard (real-time security events)
-- Proxy Panel (select agents, configure takeover, view intercepted traffic)
-- MCP Panel (auto-register/unregister)
-- Policy Editor (visual guard toggles, threshold sliders)
-- SQLite database for events and configuration
-- macOS code signing and notarization
-
-#### Rust Proxy Server
-- High-performance HTTP proxy (axum + hyper + rustls)
-- Python↔Rust HTTP Bridge
-- Proxy takeover: auto-configure Agent API settings, crash recovery
+#### Release Hardening
+- macOS notarization and signed Windows distribution
+- Installer auto-update and release-channel support
+- Expanded desktop end-to-end automation
 
 #### Guard Enhancements
 - AuditGuard upgrade: attack chain reconstruction, session security scoring

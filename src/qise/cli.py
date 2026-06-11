@@ -46,7 +46,7 @@ def _build_parser() -> argparse.ArgumentParser:
     serve_parser = subparsers.add_parser("serve", help="Start MCP Server")
     serve_parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
+        choices=["stdio"],
         default="stdio",
         help="MCP transport (default: stdio)",
     )
@@ -158,15 +158,27 @@ def _build_parser() -> argparse.ArgumentParser:
     scan_parser = subparsers.add_parser("scan", help="Preflight scan Agent assets")
     scan_parser.add_argument("--json", action="store_true", help="Output JSON")
     scan_parser.add_argument("--agents", default="", help="Comma-separated Agent names for automatic scan")
-    scan_parser.add_argument("--include-missing", action="store_true", help="Also scan known Agents that are not installed")
+    scan_parser.add_argument(
+        "--include-missing",
+        action="store_true",
+        help="Also scan known Agents that are not installed",
+    )
     scan_parser.add_argument("--no-skills", action="store_true", help="Skip Agent files/skills during automatic scan")
     scan_parser.add_argument("--no-mcp", action="store_true", help="Skip MCP config candidates during automatic scan")
-    scan_parser.add_argument("--no-agent-config", action="store_true", help="Skip Agent config checks during automatic scan")
+    scan_parser.add_argument(
+        "--no-agent-config",
+        action="store_true",
+        help="Skip Agent config checks during automatic scan",
+    )
     scan_subparsers = scan_parser.add_subparsers(dest="scan_command")
     scan_all = scan_subparsers.add_parser("all", help="Automatically scan all detected Agents")
     scan_all.add_argument("--json", action="store_true", help="Output JSON")
     scan_all.add_argument("--agents", default="", help="Comma-separated Agent names to scan")
-    scan_all.add_argument("--include-missing", action="store_true", help="Also scan known Agents that are not installed")
+    scan_all.add_argument(
+        "--include-missing",
+        action="store_true",
+        help="Also scan known Agents that are not installed",
+    )
     scan_all.add_argument("--no-skills", action="store_true", help="Skip Agent files/skills")
     scan_all.add_argument("--no-mcp", action="store_true", help="Skip MCP config candidates")
     scan_all.add_argument("--no-agent-config", action="store_true", help="Skip Agent config checks")
@@ -297,10 +309,6 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    if args.transport != "stdio":
-        print(f"Error: transport '{args.transport}' not yet supported", file=sys.stderr)
-        return 1
-
     from qise.mcp_server import main as mcp_main
     asyncio.run(mcp_main())
     return 0

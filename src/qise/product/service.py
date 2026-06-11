@@ -119,6 +119,56 @@ def is_pid_running(pid: int | None) -> bool:
     return True
 
 
+def inspect_services(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return service records annotated with their current runtime state."""
+    raw_services = state.get("services", {})
+    if not isinstance(raw_services, dict):
+        return {}
+
+    inspected: dict[str, dict[str, Any]] = {}
+    for name, raw_meta in raw_services.items():
+        if not isinstance(raw_meta, dict):
+            continue
+        meta = dict(raw_meta)
+        status = str(meta.get("status") or "")
+        try:
+            port = int(meta.get("port") or 0)
+        except (TypeError, ValueError):
+            port = 0
+        port_status = check_port("127.0.0.1", port).status if port > 0 else "unavailable"
+
+        if status == "running":
+            pid = meta.get("pid")
+            if not isinstance(pid, int) or not is_pid_running(pid):
+                meta["status"] = "stale"
+                meta["detail"] = f"recorded pid {pid or '(none)'} is not running"
+            elif not _looks_like_qise_process(pid):
+                meta["status"] = "stale"
+                meta["detail"] = f"pid {pid} is not a Qise service"
+            elif port_status != "in_use":
+                meta["status"] = "stale"
+                meta["detail"] = f"127.0.0.1:{port} is not listening"
+        elif status == "already_running" and port_status != "in_use":
+            meta["status"] = "stale"
+            meta["detail"] = f"127.0.0.1:{port} is no longer listening"
+
+        meta["port_status"] = port_status
+        inspected[str(name)] = meta
+
+    return inspected
+
+
+def services_are_active(services: dict[str, dict[str, Any]]) -> bool:
+    """Return whether both managed protection services are currently reachable."""
+    for name in ("proxy", "bridge"):
+        meta = services.get(name, {})
+        if meta.get("status") not in {"running", "already_running"}:
+            return False
+        if meta.get("port_status") != "in_use":
+            return False
+    return True
+
+
 def _looks_like_qise_process(pid: int) -> bool:
     try:
         result = subprocess.run(
@@ -177,6 +227,12 @@ def _spawn_service(name: str, cmd: list[str], port: int, env: dict[str, str]) ->
         return_code = proc.poll()
         if return_code is not None:
             raise RuntimeError(f"{name} exited with code {return_code}. See {stderr_path} for details.")
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=2)
         raise RuntimeError(f"{name} did not listen on 127.0.0.1:{port} within 5s")
 
     return {
@@ -189,6 +245,24 @@ def _spawn_service(name: str, cmd: list[str], port: int, env: dict[str, str]) ->
         "stdout_log": str(stdout_path),
         "stderr_log": str(stderr_path),
     }
+
+
+def _terminate_service_record(meta: dict[str, Any]) -> None:
+    """Best-effort rollback for a service started in the current transaction."""
+    pid = meta.get("pid")
+    if meta.get("status") != "running" or meta.get("managed_by") != "qise":
+        return
+    if not isinstance(pid, int) or not is_pid_running(pid):
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+        deadline = time.time() + 2
+        while time.time() < deadline and is_pid_running(pid):
+            time.sleep(0.05)
+        if is_pid_running(pid):
+            os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
 
 
 def _qise_service_command(config_args: list[str], service_args: list[str]) -> list[str]:
@@ -253,8 +327,14 @@ def start_managed_services(
         save_state(state)
         return services
 
-    services["bridge"] = _spawn_service("bridge", bridge_cmd, bridge_port, env)
-    services["proxy"] = _spawn_service("proxy", proxy_cmd, proxy_port, env)
+    bridge_meta = _spawn_service("bridge", bridge_cmd, bridge_port, env)
+    services["bridge"] = bridge_meta
+    try:
+        services["proxy"] = _spawn_service("proxy", proxy_cmd, proxy_port, env)
+    except Exception:
+        _terminate_service_record(bridge_meta)
+        services.pop("bridge", None)
+        raise
     services["proxy"]["upstream_url"] = upstream_url.rstrip("/")
     save_state(state)
     return services

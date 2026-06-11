@@ -60,24 +60,11 @@ pub struct GuardCheckResponse {
     /// "pass" | "warn" | "block"
     pub action: String,
     #[serde(default)]
-    pub guard_results: Vec<GuardResultSummary>,
-    #[serde(default)]
     pub security_context: String,
     #[serde(default)]
     pub warnings: Vec<String>,
     #[serde(default)]
     pub block_reason: String,
-}
-
-/// Summary of a single guard's result.
-#[derive(Debug, Deserialize)]
-pub struct GuardResultSummary {
-    pub guard: String,
-    pub verdict: String,
-    #[serde(default)]
-    pub message: String,
-    #[serde(default)]
-    pub latency_ms: u64,
 }
 
 /// Guard action type.

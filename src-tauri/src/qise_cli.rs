@@ -44,7 +44,11 @@ impl QiseInvocation {
     pub fn display(&self, args: &[String]) -> String {
         let mut parts = Vec::new();
         parts.push(self.program.to_string_lossy().to_string());
-        parts.extend(self.prefix_args.iter().map(|arg| arg.to_string_lossy().to_string()));
+        parts.extend(
+            self.prefix_args
+                .iter()
+                .map(|arg| arg.to_string_lossy().to_string()),
+        );
         parts.extend(args.iter().cloned());
         parts.join(" ")
     }
@@ -83,8 +87,12 @@ pub async fn run_permissive(args: Vec<String>) -> Result<QiseOutput, String> {
 
 pub async fn run_json(args: Vec<String>) -> Result<Value, String> {
     let output = run(args).await?;
-    serde_json::from_str::<Value>(&output.stdout)
-        .map_err(|e| format!("Failed to parse Qise JSON output: {}. stdout: {}", e, output.stdout))
+    serde_json::from_str::<Value>(&output.stdout).map_err(|e| {
+        format!(
+            "Failed to parse Qise JSON output: {}. stdout: {}",
+            e, output.stdout
+        )
+    })
 }
 
 pub async fn run_json_permissive(args: Vec<String>) -> Result<Value, String> {
