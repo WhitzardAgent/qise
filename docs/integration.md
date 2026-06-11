@@ -29,9 +29,9 @@ Agent ──API Request──▶ Qise Proxy ──Forwarded Request──▶ LLM
                        Agent ◀──Modified Response── Qise Proxy ◀──API Response──
 ```
 
-### Current CLI Setup
+### Current Product Setup
 
-The desktop app is a later productization phase. The current MVP uses CLI commands:
+The desktop app and CLI share the same protection engine. Use the desktop Agent Shield for guided setup, or run the equivalent CLI commands:
 
 ```bash
 qise protect codex

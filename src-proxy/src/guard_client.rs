@@ -3,7 +3,6 @@
 use crate::config::ProxyConfig;
 use crate::decision::{GuardCheckRequest, GuardCheckResponse};
 use reqwest::Client;
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
@@ -13,8 +12,6 @@ pub struct GuardClient {
     base_url: String,
     client: Client,
     timeout: Duration,
-    /// Whether the bridge was reachable at last check.
-    bridge_available: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl GuardClient {
@@ -29,7 +26,6 @@ impl GuardClient {
             base_url: config.bridge_url.trim_end_matches('/').to_string(),
             client,
             timeout: Duration::from_secs(config.bridge_timeout_s),
-            bridge_available: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -39,25 +35,17 @@ impl GuardClient {
         match self.client.get(&url).timeout(Duration::from_secs(5)).send().await {
             Ok(resp) if resp.status().is_success() => {
                 info!("Bridge health check OK");
-                self.bridge_available.store(true, std::sync::atomic::Ordering::Relaxed);
                 true
             }
             Ok(resp) => {
                 warn!("Bridge health check returned status {}", resp.status());
-                self.bridge_available.store(false, std::sync::atomic::Ordering::Relaxed);
                 false
             }
             Err(e) => {
                 warn!("Bridge health check failed: {}", e);
-                self.bridge_available.store(false, std::sync::atomic::Ordering::Relaxed);
                 false
             }
         }
-    }
-
-    /// Whether the bridge was reachable at last health check.
-    pub fn is_available(&self) -> bool {
-        self.bridge_available.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Send a guard check request to the Python Bridge.
@@ -77,7 +65,6 @@ impl GuardClient {
                                 guard_resp.warnings.len(),
                                 guard_resp.block_reason,
                             );
-                            self.bridge_available.store(true, std::sync::atomic::Ordering::Relaxed);
                             Ok(guard_resp)
                         }
                         Err(e) => {
@@ -97,7 +84,6 @@ impl GuardClient {
                     Err("Bridge timeout".into())
                 } else {
                     error!("Guard check request failed: {}", e);
-                    self.bridge_available.store(false, std::sync::atomic::Ordering::Relaxed);
                     Err(format!("Bridge request failed: {}", e))
                 }
             }

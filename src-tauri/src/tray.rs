@@ -25,10 +25,9 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
                 }
             }
             "quit" => {
-                let state = app.state::<crate::SharedState>().inner().clone();
                 let app_handle = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    crate::cleanup_services(&state).await;
+                    crate::cleanup_services().await;
                     app_handle.exit(0);
                 });
             }
@@ -37,40 +36,4 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
         .build(app)?;
 
     Ok(())
-}
-
-/// Update the tray menu text based on current protection state.
-pub fn update_tray_menu(app: &tauri::AppHandle, _protection_enabled: bool) {
-    if let Some(tray) = app.tray_by_id("main-tray") {
-        let show_item = match MenuItem::with_id(app, "show_window", "Guard Dashboard", true, None::<&str>) {
-            Ok(item) => item,
-            Err(e) => {
-                tracing::warn!("Failed to create show menu item: {}", e);
-                return;
-            }
-        };
-        let quit_item = match MenuItem::with_id(app, "quit", "Quit Qise", true, None::<&str>) {
-            Ok(item) => item,
-            Err(e) => {
-                tracing::warn!("Failed to create quit menu item: {}", e);
-                return;
-            }
-        };
-        let separator = match PredefinedMenuItem::separator(app) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!("Failed to create separator: {}", e);
-                return;
-            }
-        };
-
-        match Menu::with_items(app, &[&show_item, &separator, &quit_item]) {
-            Ok(menu) => {
-                let _ = tray.set_menu(Some(menu));
-            }
-            Err(e) => {
-                tracing::warn!("Failed to rebuild tray menu: {}", e);
-            }
-        }
-    }
 }

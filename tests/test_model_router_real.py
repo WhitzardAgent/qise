@@ -1,12 +1,11 @@
 """Tests for ModelRouter real implementation."""
 
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from qise.core.models import ModelUnavailableError
-from qise.models.router import ModelRouter, ModelConfig, _parse_json_response
+from qise.models.router import ModelConfig, ModelRouter, _parse_json_response
 
 
 class TestParseJsonResponse:
@@ -101,6 +100,9 @@ class TestModelRouterSlmCheckSync:
         ))
         with pytest.raises(ModelUnavailableError, match="connection failed"):
             router.slm_check_sync("test prompt")
+        with pytest.raises(ModelUnavailableError, match="temporarily unavailable"):
+            router.slm_check_sync("second prompt")
+        assert mock_post.call_count == 1
 
     @patch("qise.models.router.httpx.post")
     def test_raises_on_timeout(self, mock_post: MagicMock) -> None:
