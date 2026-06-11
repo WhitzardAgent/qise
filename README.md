@@ -1,6 +1,6 @@
 <div align="center">
 
-# Qise
+# <img src=src-tauri/icons/logo.png width="18%"/> Qise
 
 **Local-first security for AI coding agents.**
 

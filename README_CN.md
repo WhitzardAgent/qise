@@ -1,6 +1,6 @@
 <div align="center">
 
-# Qise
+# <img src=src-tauri/icons/logo.png width="18%"/>  Qise
 
 **给 AI 编程 Agent 使用的本地优先安全层。**
 
