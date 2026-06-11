@@ -1,8 +1,8 @@
 <div align="center">
 
-# <img src=src-tauri/icons/logo.png width="18%"/>  Qise
+<img src=src-tauri/icons/logo-2.png width="36%"/> 
 
-**给 AI 编程 Agent 使用的本地优先安全层。**
+**给 AI Agent 使用的本地优先安全层。**
 
 Qise 可以帮助你在使用 Codex、OpenClaw、Claude Code 以及自定义 Agent 时，增加一层本地安全防护：扫描高风险集成、把模型流量接入本地 Guard Proxy、拦截危险动作，并留下可读的本地安全事件记录。
 
