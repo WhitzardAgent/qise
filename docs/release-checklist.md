@@ -105,6 +105,16 @@ Add its content to the GitHub repository secret `TAURI_SIGNING_PRIVATE_KEY`. Wit
 gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/qise-updater.key
 ```
 
+When using the GitHub website on macOS, copy the exact file contents without
+printing them in the terminal:
+
+```bash
+pbcopy < ~/.tauri/qise-updater.key
+```
+
+Then paste into the secret value field. Do not copy the `%` marker that zsh may
+display after `cat` when a file has no trailing newline.
+
 The current key has no password, so `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` may remain unset. If the key is replaced with a password-protected key, add that password as the second secret. Never commit or print the private key in logs.
 
 ### Prepare and trigger a stable release

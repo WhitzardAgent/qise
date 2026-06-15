@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tomllib
+from base64 import b64encode
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts" / "check_release_version.py"
+KEY_CHECKER = ROOT / "scripts" / "check_updater_signing_key.py"
 
 
 def run_checker(*args: str) -> subprocess.CompletedProcess[str]:
@@ -19,6 +22,43 @@ def run_checker(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+def run_key_checker(value: str | None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if value is None:
+        env.pop("TAURI_SIGNING_PRIVATE_KEY", None)
+    else:
+        env["TAURI_SIGNING_PRIVATE_KEY"] = value
+    return subprocess.run(
+        [sys.executable, str(KEY_CHECKER)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_updater_signing_key_checker_accepts_rsign_key() -> None:
+    decoded = b"untrusted comment: rsign encrypted secret key\n" + (b"A" * 212)
+    result = run_key_checker(b64encode(decoded).decode("ascii"))
+    assert result.returncode == 0, result.stderr
+    assert "updater signing key format: valid" in result.stdout
+
+
+def test_updater_signing_key_checker_rejects_extra_terminal_prompt() -> None:
+    decoded = b"untrusted comment: rsign encrypted secret key\n" + (b"A" * 212)
+    result = run_key_checker(b64encode(decoded).decode("ascii") + "%")
+    assert result.returncode == 1
+    assert "invalid Base64 character" in result.stderr
+    assert "copy the key file directly" in result.stderr
+
+
+def test_updater_signing_key_checker_rejects_missing_secret() -> None:
+    result = run_key_checker(None)
+    assert result.returncode == 1
+    assert "TAURI_SIGNING_PRIVATE_KEY is not set" in result.stderr
 
 
 def test_release_versions_are_synchronized() -> None:
@@ -83,6 +123,7 @@ def test_desktop_release_workflow_builds_signed_drafts() -> None:
     )
     assert "tauri-apps/tauri-action@v0.6.2" in workflow
     assert "tauriScript: npx --prefix src-ui tauri" in workflow
+    assert "python scripts/check_updater_signing_key.py" in workflow
     assert "releaseDraft: true" in workflow
     assert "prerelease: false" in workflow
     assert "updaterJsonPreferNsis: true" in workflow
