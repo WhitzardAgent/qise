@@ -1,6 +1,6 @@
 {
   "productName": "Qise",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "com.qise.desktop",
   "build": {
     "frontendDist": "../src-ui/dist",
@@ -33,6 +33,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "macOS": {
       "signingIdentity": "-"
@@ -44,5 +45,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2RjRFRkNCMTlCRUNDRDAKUldUUXpMNFp5Ky8waHZZKzgzLyt1NXJhZUx6THd5QTRnMEJCYnFXb3NYdWFWNjJPSFVKZnpyeVEK",
+      "endpoints": [
+        "https://github.com/WhitzardAgent/qise/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

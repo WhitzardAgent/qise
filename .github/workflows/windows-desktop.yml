@@ -2,14 +2,6 @@ name: Build Windows Desktop Test Installer
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "installers/**"
-
-permissions:
-  contents: write
 
 concurrency:
   group: windows-desktop-${{ github.ref }}
@@ -70,16 +62,3 @@ jobs:
           name: qise-windows-x64-test-installer
           path: installers/windows/*.exe
           if-no-files-found: error
-
-      - name: Commit Windows installer to main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add installers/windows
-          git diff --cached --quiet
-          if ($LASTEXITCODE -ne 0) {
-            git commit -m "build: update Windows test installer [skip ci]"
-            git push
-          }

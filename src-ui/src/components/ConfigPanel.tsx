@@ -3,6 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ReactNode } from "react";
 import DiagnosticsPanel from "./DiagnosticsPanel";
 import { tr, type Locale } from "../lib/locale";
+import {
+  describeUpdateState,
+  type AppUpdateState,
+  type UpdateDisplayTone,
+} from "../lib/appUpdater";
 
 interface SLMConfig {
   base_url: string;
@@ -161,6 +166,87 @@ function ConfigToggle({
   );
 }
 
+function updateToneColor(tone: UpdateDisplayTone): string {
+  return {
+    neutral: "var(--text-tertiary)",
+    blue: "var(--qise-blue)",
+    green: "var(--qise-green)",
+    yellow: "var(--qise-yellow)",
+    red: "var(--qise-red)",
+  }[tone];
+}
+
+function ApplicationUpdateCard({
+  locale,
+  state,
+  onCheck,
+}: {
+  locale: Locale;
+  state: AppUpdateState;
+  onCheck: () => Promise<void>;
+}) {
+  const display = describeUpdateState(state, locale);
+  const busy = ["checking", "downloading", "installing", "restarting"].includes(state.phase);
+
+  return (
+    <div className="qise-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium uppercase tracking-wide text-[var(--text-primary)]">
+            {tr(locale, "Application Update", "应用更新")}
+          </h3>
+          <p className="mt-2 text-sm font-medium" style={{ color: updateToneColor(display.tone) }}>
+            {display.label}
+          </p>
+          <p className="mt-1 text-sm text-[var(--text-tertiary)]">{display.detail}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void onCheck()}
+          disabled={busy}
+          className={`rounded-[43px] px-5 py-2 text-sm font-medium transition-all ${
+            busy
+              ? "cursor-not-allowed bg-[var(--bg-card)] text-[var(--text-dim)]"
+              : "bg-[var(--button-primary-bg)] text-[var(--button-primary-text)] hover:opacity-60"
+          }`}
+        >
+          {state.phase === "checking"
+            ? tr(locale, "Checking...", "正在检查...")
+            : tr(locale, "Check for updates", "检查更新")}
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2">
+          <p className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Current version", "当前版本")}</p>
+          <p className="mt-1 font-mono text-sm text-[var(--text-primary)]">
+            {state.currentVersion || "-"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2">
+          <p className="text-xs text-[var(--text-tertiary)]">{tr(locale, "Latest version", "最新版本")}</p>
+          <p className="mt-1 font-mono text-sm text-[var(--text-primary)]">
+            {state.latestVersion || "-"}
+          </p>
+        </div>
+      </div>
+
+      {state.phase === "downloading" && (
+        <div className="mt-4">
+          <div className="h-2 overflow-hidden rounded-full bg-[var(--indicator-muted)]">
+            <div
+              className={`h-full bg-qise-blue transition-all ${
+                display.percentage === null ? "w-1/3 animate-pulse" : ""
+              }`}
+              style={display.percentage === null ? undefined : { width: `${display.percentage}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function guardModeOptions(locale: Locale) {
   return [
     { value: "observe", label: tr(locale, "Observe (log only)", "观察（仅记录）") },
@@ -169,7 +255,15 @@ function guardModeOptions(locale: Locale) {
   ];
 }
 
-export default function ConfigPanel({ locale }: { locale: Locale }) {
+export default function ConfigPanel({
+  locale,
+  updateState,
+  onCheckForUpdates,
+}: {
+  locale: Locale;
+  updateState: AppUpdateState;
+  onCheckForUpdates: () => Promise<void>;
+}) {
   const [config, setConfig] = useState<ShieldConfig | null>(null);
   const [originalConfig, setOriginalConfig] = useState<ShieldConfig | null>(null);
   const [configPath, setConfigPath] = useState<string>("");
@@ -229,11 +323,18 @@ export default function ConfigPanel({ locale }: { locale: Locale }) {
 
   if (!config) {
     return (
-      <div className="qise-card p-6 text-center">
-        <p className="inline-flex items-center justify-center gap-2 text-sm text-[var(--text-dim)]">
-          {!error && <span className="qise-spinner qise-spinner-blue" />}
-          {error ? `${tr(locale, "Error", "错误")}：${error}` : tr(locale, "Loading configuration...", "正在加载配置...")}
-        </p>
+      <div className="space-y-6">
+        <ApplicationUpdateCard
+          locale={locale}
+          state={updateState}
+          onCheck={onCheckForUpdates}
+        />
+        <div className="qise-card p-6 text-center">
+          <p className="inline-flex items-center justify-center gap-2 text-sm text-[var(--text-dim)]">
+            {!error && <span className="qise-spinner qise-spinner-blue" />}
+            {error ? `${tr(locale, "Error", "错误")}：${error}` : tr(locale, "Loading configuration...", "正在加载配置...")}
+          </p>
+        </div>
       </div>
     );
   }
@@ -321,6 +422,11 @@ export default function ConfigPanel({ locale }: { locale: Locale }) {
 
   return (
     <div className="space-y-6">
+      <ApplicationUpdateCard
+        locale={locale}
+        state={updateState}
+        onCheck={onCheckForUpdates}
+      />
       <DiagnosticsPanel locale={locale} />
 
       {/* Action bar */}

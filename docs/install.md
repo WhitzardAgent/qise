@@ -6,6 +6,19 @@
 - macOS or Linux shell for the current MVP scripts
 - An existing Agent install only if you want to run `qise protect codex` against your real config
 
+## Desktop Install
+
+Download the latest stable desktop installer from:
+
+https://github.com/WhitzardAgent/qise/releases/latest
+
+Supported desktop packages:
+
+- Windows x64 NSIS installer.
+- macOS Apple Silicon DMG.
+
+Qise 0.3.0 is the first updater-enabled release. Users on 0.2.0 must install 0.3.0 manually once. Later releases update automatically after startup when no Agent is protected. Active protection defers the update until a later safe startup.
+
 ## Source Install
 
 Recommended before the first PyPI release:

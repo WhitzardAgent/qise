@@ -366,12 +366,8 @@ def _cmd_guards(args: argparse.Namespace) -> int:
 
 
 def _cmd_version(args: argparse.Namespace) -> int:
-    from importlib.metadata import version as pkg_version
+    from qise import __version__ as v
 
-    try:
-        v = pkg_version("qise")
-    except Exception:
-        from qise import __version__ as v
     print(f"qise {v}")
     return 0
 

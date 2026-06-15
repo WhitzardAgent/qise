@@ -55,7 +55,7 @@ Qise is local-first. Product state, backups, and events are stored under `~/.qis
 
 ## Current Status
 
-Qise is currently an alpha/MVP project. The macOS app can be built on macOS, and a Windows test installer can be built by a GitHub Actions Windows runner. PyPI publishing, installer signing, and formal release distribution are still release-process work.
+Qise is currently an alpha/MVP project. Stable desktop builds are distributed through GitHub Releases for Windows x64 and macOS Apple Silicon. Tauri updater artifacts are signed, but Windows Authenticode signing and Apple Developer ID notarization are still future release-hardening work.
 
 | Area | What works now | Status |
 | --- | --- | --- |
@@ -74,21 +74,18 @@ Qise is currently an alpha/MVP project. The macOS app can be built on macOS, and
 
 The desktop app is the easiest way to try Qise as a product. It gives you pages for protection status, agent detection, one-click protection, preflight scanning, event logs, guard rules, local SLM setup, backups, diagnostics, and SDK snippets.
 
-### Option A: Install A Prebuilt App From The Repository
+### Option A: Install A Prebuilt App From GitHub Releases
 
-Test installers are stored under:
+Open the [latest Qise release](https://github.com/WhitzardAgent/qise/releases/latest) and download:
 
 ```text
-installers/
-├── macos/
-│   └── Qise_0.2.0_aarch64.dmg
-└── windows/
-    └── Qise_0.2.0_x64-setup.exe
+macOS Apple Silicon: Qise_*_aarch64.dmg
+Windows x64:         Qise_*_x64-setup.exe
 ```
 
 On macOS:
 
-1. Open `installers/macos/Qise_0.2.0_aarch64.dmg`.
+1. Open the downloaded `Qise_*_aarch64.dmg`.
 2. Drag `Qise.app` into `Applications`.
 3. Open `Qise.app`.
 
@@ -96,11 +93,13 @@ If macOS blocks the first launch because the build is not notarized yet, right-c
 
 On Windows:
 
-1. Open `Qise_*_x64-setup.exe` under `installers/windows/`.
+1. Open the downloaded `Qise_*_x64-setup.exe`.
 2. Complete the installer wizard.
 3. Open Qise from the Start menu.
 
 The Windows test installer is not signed yet, so Windows SmartScreen may show an unknown-publisher warning.
+
+Qise 0.3.0 is the first updater-enabled release. Existing 0.2.0 users must install 0.3.0 manually once. Later stable releases are checked after startup and installed automatically when Qise is not protecting an Agent. If protection is active, Qise defers the update until a later safe startup. Update status and manual checking are available under `Settings -> Application Update`.
 
 ### Option B: Build The macOS App From Source
 
@@ -134,38 +133,19 @@ After a successful build, the important files are:
 
 ```text
 src-tauri/target/release/bundle/macos/Qise.app
-src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/Qise_0.3.0_aarch64.dmg
 ```
 
 The exact DMG suffix can vary by version and CPU architecture. On Apple Silicon, it is commonly `aarch64`.
 
 To install the locally built app:
 
-1. Open `src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg`.
+1. Open `src-tauri/target/release/bundle/dmg/Qise_0.3.0_aarch64.dmg`.
 2. Drag `Qise.app` into `Applications`.
 3. Open `Qise.app`.
 
 
-<!-- ### Option C: Build The Windows EXE With GitHub Actions
-
-The Windows installer must be generated in a Windows environment. After the project is pushed to the GitHub `main` branch, `.github/workflows/windows-desktop.yml`:
-
-1. Installs Python, Node.js, and Rust on a GitHub `windows-latest` runner.
-2. Builds the bundled `qise.exe` runtime with PyInstaller.
-3. Builds the NSIS `Qise_*_x64-setup.exe` with Tauri.
-4. Uploads the installer as an Actions artifact.
-5. Commits the installer back to `installers/windows/`.
-
-Before the first build, open `Settings -> Actions -> General -> Workflow permissions` in the GitHub repository and select `Read and write permissions`. If `main` is protected, allow GitHub Actions to write to it or download the artifact manually from the Actions page.
-
-After the workflow succeeds and commits the installer, update the local checkout:
-
-```bash
-git pull --ff-only origin main
-ls -lh installers/windows
-```
-
-GitHub limits ordinary Git files to 100 MiB each. Use GitHub Releases or Git LFS if an installer exceeds that limit. -->
+The manual `Build Windows Desktop Test Installer` workflow remains available for test artifacts. It does not publish a release or commit generated installers into `main`.
 
 ### Run The Desktop App In Development Mode
 

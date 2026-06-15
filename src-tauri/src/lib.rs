@@ -33,6 +33,8 @@ pub type SharedState = Arc<Mutex<AppState>>;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::new(Mutex::new(AppState::default())))
         .setup(|app| {
             tray::setup_tray(app)?;

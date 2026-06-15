@@ -7,6 +7,7 @@ import ConfigPanel from "./components/ConfigPanel";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import EventLog from "./components/EventLog";
 import GuardList from "./components/GuardList";
+import { useAppUpdater } from "./hooks/useAppUpdater";
 import appIcon from "../../src-tauri/icons/icon.png";
 import {
   AgentInfo,
@@ -666,7 +667,15 @@ function MetricTile({
   );
 }
 
-function StatusFooter({ status, locale }: { status: AppStatus | null; locale: Locale }) {
+function StatusFooter({
+  status,
+  version,
+  locale,
+}: {
+  status: AppStatus | null;
+  version: string;
+  locale: Locale;
+}) {
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-subtle)] bg-[rgba(243,248,252,0.94)] backdrop-blur">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-2 px-5 py-2 text-xs text-[var(--text-tertiary)] sm:grid-cols-3">
@@ -679,7 +688,9 @@ function StatusFooter({ status, locale }: { status: AppStatus | null; locale: Lo
           {tr(locale, "SLM", "小模型")}：<span className="font-mono text-[var(--text-primary)]">{slmStatusLabel(locale, slmLabel(status))}</span>
         </span>
         <span className="text-left sm:text-right">
-          <span className="font-mono text-[var(--text-primary)]">v0.2.0</span>
+          <span className="font-mono text-[var(--text-primary)]">
+            {version ? `v${version}` : "-"}
+          </span>
         </span>
       </div>
     </footer>
@@ -1803,6 +1814,7 @@ function App() {
     return stored === "zh" ? "zh" : "en";
   });
   const [status, setStatus] = useState<AppStatus | null>(null);
+  const [statusResolved, setStatusResolved] = useState(false);
   const [guards, setGuards] = useState<GuardInfo[]>([]);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -1820,6 +1832,13 @@ function App() {
     checking: tr(locale, "Still checking Qise. You can use the app while diagnostics finish.", "仍在检查 Qise。诊断完成前你也可以继续使用应用。"),
     ready: tr(locale, "Qise is ready.", "Qise 已就绪。"),
   }[bootHintKey];
+  const appUpdater = useAppUpdater(
+    {
+      known: statusResolved && status !== null,
+      enabled: status === null || statusProtectionEnabled(status),
+    },
+    statusResolved,
+  );
 
   useEffect(() => {
     window.localStorage.setItem("qise-locale", locale);
@@ -1843,6 +1862,7 @@ function App() {
       setLastError(String(e));
     } finally {
       statusInFlight.current = false;
+      setStatusResolved(true);
       setBootHintKey("ready");
       setLoading(false);
     }
@@ -2171,9 +2191,15 @@ function App() {
         {activePage === "backup" && <BackupRestorePage status={status} onRefresh={refreshAll} setError={setLastError} locale={locale} />}
         {activePage === "integrations" && <IntegrationsPage setError={setLastError} locale={locale} />}
         {activePage === "advanced" && <AdvancedLabPage setError={setLastError} locale={locale} />}
-        {activePage === "settings" && <ConfigPanel locale={locale} />}
+        {activePage === "settings" && (
+          <ConfigPanel
+            locale={locale}
+            updateState={appUpdater.state}
+            onCheckForUpdates={appUpdater.checkForUpdates}
+          />
+        )}
       </div>
-      <StatusFooter status={status} locale={locale} />
+      <StatusFooter status={status} version={appUpdater.state.currentVersion} locale={locale} />
     </div>
   );
 }
