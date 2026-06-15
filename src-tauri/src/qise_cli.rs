@@ -14,6 +14,11 @@ use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Clone, Debug)]
 pub struct QiseInvocation {
@@ -38,6 +43,8 @@ impl QiseInvocation {
         if let Some(ref pythonpath) = self.pythonpath {
             command.env("PYTHONPATH", pythonpath);
         }
+        #[cfg(windows)]
+        command.creation_flags(CREATE_NO_WINDOW);
         command
     }
 
