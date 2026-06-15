@@ -2,6 +2,8 @@
 
 <img src=src-tauri/icons/logo-2.png width="36%"/> 
 
+**上海创智学院 (SII) | 复旦大学**
+
 **给 AI Agent 使用的本地优先安全层。**
 
 Qise 可以帮助你在使用 Codex、OpenClaw、Claude Code 以及自定义 Agent 时，增加一层本地安全防护：扫描高风险集成、把模型流量接入本地 Guard Proxy、拦截危险动作，并留下可读的本地安全事件记录。

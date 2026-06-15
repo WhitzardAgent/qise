@@ -2,6 +2,8 @@
 
 <img src=src-tauri/icons/logo-2.png width="36%"/> 
 
+**Shanghai Innovation Institute (SII) | Fudan University**
+
 **Local-First Security for AI Agents.**
 
 Qise helps you use agents such as Codex, OpenClaw, Claude Code, and custom agents with a local safety layer. It can scan risky integrations, route model traffic through a guard proxy, block dangerous actions, and show a readable local event trail.
