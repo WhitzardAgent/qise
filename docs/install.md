@@ -17,7 +17,7 @@ Supported desktop packages:
 - Windows x64 NSIS installer.
 - macOS Apple Silicon DMG.
 
-Qise 0.3.0 is the first updater-enabled release. Users on 0.2.0 must install 0.3.0 manually once. Later releases update automatically after startup when no Agent is protected. Active protection defers the update until a later safe startup.
+This Qise 0.2.0 build is the first updater-enabled build. Users on an earlier 0.2.0 build must install it manually once because automatic updates require a higher version number. Later releases update automatically after startup when no Agent is protected. Active protection defers the update until a later safe startup.
 
 ## Source Install
 

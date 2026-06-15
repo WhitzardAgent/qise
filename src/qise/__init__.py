@@ -13,7 +13,7 @@ from qise.core.models import (
 )
 from qise.core.shield import Shield
 
-__version__ = "0.3.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Shield",

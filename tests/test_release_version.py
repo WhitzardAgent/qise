@@ -22,20 +22,20 @@ def run_checker(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_release_versions_are_synchronized() -> None:
-    result = run_checker("--expected", "0.3.0")
+    result = run_checker("--expected", "0.2.0")
     assert result.returncode == 0, result.stderr
-    assert "release version: 0.3.0" in result.stdout
+    assert "release version: 0.2.0" in result.stdout
 
 
 def test_matching_git_tag_is_accepted() -> None:
-    result = run_checker("--tag", "v0.3.0")
+    result = run_checker("--tag", "v0.2.0")
     assert result.returncode == 0, result.stderr
 
 
 def test_mismatched_git_tag_is_rejected() -> None:
     result = run_checker("--tag", "v9.9.9")
     assert result.returncode == 1
-    assert "does not match release version 0.3.0" in result.stderr
+    assert "does not match release version 0.2.0" in result.stderr
 
 
 def test_tauri_updater_configuration_is_complete() -> None:

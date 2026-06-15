@@ -99,7 +99,7 @@ On Windows:
 
 The Windows test installer is not signed yet, so Windows SmartScreen may show an unknown-publisher warning.
 
-Qise 0.3.0 is the first updater-enabled release. Existing 0.2.0 users must install 0.3.0 manually once. Later stable releases are checked after startup and installed automatically when Qise is not protecting an Agent. If protection is active, Qise defers the update until a later safe startup. Update status and manual checking are available under `Settings -> Application Update`.
+This Qise 0.2.0 build is the first updater-enabled build. Users who installed an earlier 0.2.0 build must install this build manually once because automatic updates require a higher version number. Later stable releases are checked after startup and installed automatically when Qise is not protecting an Agent. If protection is active, Qise defers the update until a later safe startup. Update status and manual checking are available under `Settings -> Application Update`.
 
 ### Option B: Build The macOS App From Source
 
@@ -133,14 +133,14 @@ After a successful build, the important files are:
 
 ```text
 src-tauri/target/release/bundle/macos/Qise.app
-src-tauri/target/release/bundle/dmg/Qise_0.3.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg
 ```
 
 The exact DMG suffix can vary by version and CPU architecture. On Apple Silicon, it is commonly `aarch64`.
 
 To install the locally built app:
 
-1. Open `src-tauri/target/release/bundle/dmg/Qise_0.3.0_aarch64.dmg`.
+1. Open `src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg`.
 2. Drag `Qise.app` into `Applications`.
 3. Open `Qise.app`.
 

@@ -99,7 +99,7 @@ Windows：
 
 Windows 测试安装包尚未签名，因此 Windows SmartScreen 可能显示未知发布者警告。
 
-Qise 0.3.0 是第一个包含自动更新器的版本。已经安装 0.2.0 的用户需要手动安装一次 0.3.0。之后 Qise 会在启动后检查稳定更新，并在未保护 Agent 时自动下载安装和重启；如果正在保护 Agent，则延迟到后续安全启动。可以在 `设置 -> 应用更新` 查看状态或手动检查。
+当前 Qise 0.2.0 是第一个包含自动更新器的构建。安装过早期 0.2.0 构建的用户仍需手动覆盖安装一次，因为自动更新只能识别更高的版本号。之后 Qise 会在启动后检查稳定更新，并在未保护 Agent 时自动下载安装和重启；如果正在保护 Agent，则延迟到后续安全启动。可以在 `设置 -> 应用更新` 查看状态或手动检查。
 
 ### 方式 B：从源码构建 macOS App
 
@@ -133,14 +133,14 @@ src-ui/node_modules/.bin/tauri build
 
 ```text
 src-tauri/target/release/bundle/macos/Qise.app
-src-tauri/target/release/bundle/dmg/Qise_0.3.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg
 ```
 
 DMG 文件名中的版本号和 CPU 架构可能会变化。Apple Silicon 上通常是 `aarch64`。
 
 安装本地构建版：
 
-1. 打开 `src-tauri/target/release/bundle/dmg/Qise_0.3.0_aarch64.dmg`。
+1. 打开 `src-tauri/target/release/bundle/dmg/Qise_0.2.0_aarch64.dmg`。
 2. 把 `Qise.app` 拖进 `Applications`。
 3. 打开 `Qise.app`。
 
