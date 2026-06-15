@@ -82,7 +82,7 @@ def test_desktop_release_workflow_builds_signed_drafts() -> None:
         "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" in workflow
     )
     assert "tauri-apps/tauri-action@v0.6.2" in workflow
-    assert "tauriScript: npm --prefix src-ui exec -- tauri" in workflow
+    assert "tauriScript: npx --prefix src-ui tauri" in workflow
     assert "releaseDraft: true" in workflow
     assert "prerelease: false" in workflow
     assert "updaterJsonPreferNsis: true" in workflow
