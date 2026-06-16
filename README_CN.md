@@ -55,6 +55,10 @@ Qise 可以：
 
 Qise 是 local-first 的。默认情况下，产品状态、备份和事件都保存在 `~/.qise/`。事件记录只保存紧凑证据片段，不保存完整模型流量。
 
+<div align="center"> 
+<img src=docs/qise_main.png width="88%"/>
+</div>
+
 ## 当前状态
 
 Qise 目前处于 alpha/MVP 阶段。Windows x64 和 macOS Apple Silicon 的稳定桌面版本通过 GitHub Releases 分发。Tauri 自动更新包已经签名，但 Windows Authenticode 签名和 Apple Developer ID 公证仍属于后续发布加固工作。

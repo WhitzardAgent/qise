@@ -55,6 +55,10 @@ Qise can:
 
 Qise is local-first. Product state, backups, and events are stored under `~/.qise/` by default. Event records store compact evidence snippets, not full model traffic.
 
+<div align="center"> 
+<img src=docs/qise_main.png width="88%"/>
+</div>
+
 ## Current Status
 
 Qise is currently an alpha/MVP project. Stable desktop builds are distributed through GitHub Releases for Windows x64 and macOS Apple Silicon. Tauri updater artifacts are signed, but Windows Authenticode signing and Apple Developer ID notarization are still future release-hardening work.
