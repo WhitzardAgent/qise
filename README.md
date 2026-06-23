@@ -30,6 +30,10 @@ The desktop app and CLI use the same Python Qise product engine. The UI is not a
 
 ## What Qise Does
 
+<div align="center"> 
+<img src=docs/qise-frame.png width="88%"/>
+</div>
+
 AI coding agents can read files, run shell commands, call MCP servers, install skills, use memories, and send data to model APIs. That power is useful, but it creates a new local security boundary: poisoned tool descriptions, malicious skills, prompt injection, unsafe commands, and accidental secret leaks can become real machine-level risk.
 
 Qise runs on your machine beside the agent you already use. It is not a model provider and it does not replace your agent.

@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Qise is a local-first runtime security framework for AI agents such as Codex, OpenClaw, Claude Code, and custom agents."
+    />
+    <link rel="icon" type="image/png" href="src-tauri/icons/logo.png" />
+    <title>Qise | Local-First Security for AI Agents</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fbfaf7;
+        --paper: #ffffff;
+        --paper-soft: #f7f5ef;
+        --ink: #10213f;
+        --muted: #657086;
+        --line: rgba(16, 33, 63, 0.12);
+        --line-strong: rgba(16, 33, 63, 0.18);
+        --accent: #f5aa19;
+        --accent-dark: #bb7600;
+        --blue: #2c65b4;
+        --blue-soft: #eaf2ff;
+        --shadow: 0 24px 80px rgba(28, 45, 80, 0.13);
+        --max: 1400px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
+          Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(245, 170, 25, 0.12), transparent 34rem),
+          linear-gradient(180deg, #fffdf8 0%, var(--bg) 38%, #fff 100%);
+        color: var(--ink);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      img {
+        display: block;
+        max-width: 100%;
+      }
+
+      [data-lang="en"] {
+        display: none;
+      }
+
+      html[lang="en"] [data-lang="zh"] {
+        display: none;
+      }
+
+      html[lang="en"] [data-lang="en"] {
+        display: revert;
+      }
+
+      .page-shell {
+        min-height: 100vh;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid rgba(16, 33, 63, 0.08);
+        background: rgba(255, 253, 248, 0.86);
+        backdrop-filter: blur(18px);
+      }
+
+      .nav-inner {
+        width: min(var(--max), calc(100% - 36px));
+        min-height: 72px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        width: 44px;
+        height: 44px;
+        object-fit: contain;
+      }
+
+      .brand-text {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+      }
+
+      .brand-name {
+        font-size: 19px;
+        font-weight: 760;
+        letter-spacing: 0;
+      }
+
+      .brand-subtitle {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: nowrap;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        color: #2e3d57;
+        font-size: 14px;
+        font-weight: 560;
+      }
+
+      .nav-links a {
+        transition: color 160ms ease;
+      }
+
+      .nav-links a:hover {
+        color: var(--blue);
+      }
+
+      .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .lang-switch {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .lang-switch button {
+        min-width: 42px;
+        height: 30px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 680;
+        cursor: pointer;
+      }
+
+      .lang-switch button.is-active {
+        background: var(--ink);
+        color: #fff;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: 14px;
+        font-weight: 720;
+        line-height: 1;
+        transition:
+          transform 160ms ease,
+          border-color 160ms ease,
+          background 160ms ease,
+          box-shadow 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .button-primary {
+        background: var(--ink);
+        color: #fff;
+        box-shadow: 0 14px 30px rgba(16, 33, 63, 0.18);
+      }
+
+      .button-primary:hover {
+        background: #07152f;
+      }
+
+      .button-secondary {
+        background: rgba(255, 255, 255, 0.78);
+        border-color: var(--line-strong);
+        color: var(--ink);
+      }
+
+      .button-secondary:hover {
+        border-color: rgba(44, 101, 180, 0.34);
+        background: #fff;
+      }
+
+      main {
+        overflow: hidden;
+      }
+
+      .hero {
+        width: min(var(--max), calc(100% - 36px));
+        margin: 0 auto;
+        padding: 82px 0 72px;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.88fr) minmax(420px, 1.12fr);
+        align-items: center;
+        gap: 54px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid rgba(245, 170, 25, 0.38);
+        border-radius: 999px;
+        background: rgba(255, 247, 224, 0.88);
+        color: #6f4a00;
+        font-size: 13px;
+        font-weight: 720;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 5px rgba(245, 170, 25, 0.16);
+      }
+
+      h1 {
+        margin: 24px 0 0;
+        max-width: 720px;
+        font-size: clamp(48px, 7vw, 88px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        margin: 24px 0 0;
+        max-width: 650px;
+        color: var(--muted);
+        font-size: 19px;
+        line-height: 1.75;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 34px;
+      }
+
+      .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 26px;
+        color: #516079;
+        font-size: 13px;
+        font-weight: 640;
+      }
+
+      .meta-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.68);
+      }
+
+      .hero-card {
+        position: relative;
+        border: 1px solid rgba(16, 33, 63, 0.1);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .hero-card img {
+        width: 100%;
+        aspect-ratio: 1.58 / 1;
+        object-fit: contain;
+        background: #fff;
+      }
+
+      .hero-card-caption {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 16px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 620;
+      }
+
+      .section {
+        padding: 76px 0;
+      }
+
+      .section.alt {
+        background: #fff;
+        border-top: 1px solid rgba(16, 33, 63, 0.08);
+        border-bottom: 1px solid rgba(16, 33, 63, 0.08);
+      }
+
+      .section-inner {
+        width: min(var(--max), calc(100% - 36px));
+        margin: 0 auto;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 28px;
+        margin-bottom: 32px;
+      }
+
+      h2 {
+        margin: 0;
+        max-width: 720px;
+        font-size: clamp(30px, 4vw, 48px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .section-note {
+        max-width: 420px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .feature-card,
+      .doc-card,
+      .step-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.78);
+      }
+
+      .feature-card {
+        min-height: 214px;
+        padding: 24px;
+      }
+
+      .feature-kicker {
+        color: var(--accent-dark);
+        font-size: 12px;
+        font-weight: 780;
+        text-transform: uppercase;
+      }
+
+      .feature-card h3,
+      .doc-card h3,
+      .step-card h3 {
+        margin: 18px 0 0;
+        color: var(--ink);
+        font-size: 20px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      .feature-card p,
+      .doc-card p,
+      .step-card p {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .visual-band {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+        align-items: center;
+        gap: 36px;
+      }
+
+      .visual-image {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 18px 58px rgba(28, 45, 80, 0.1);
+        overflow: hidden;
+      }
+
+      .visual-image img {
+        width: 100%;
+        aspect-ratio: 1.78 / 1;
+        object-fit: contain;
+        background: #fff;
+      }
+
+      .list {
+        display: grid;
+        gap: 12px;
+        margin-top: 26px;
+      }
+
+      .list-item {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .list-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--blue-soft);
+        color: var(--blue);
+        font-size: 13px;
+        font-weight: 780;
+      }
+
+      .list-item strong {
+        display: block;
+        font-size: 16px;
+        line-height: 1.45;
+      }
+
+      .list-item span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .steps-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .step-card {
+        padding: 24px;
+        background: linear-gradient(180deg, #fff 0%, #fffaf0 100%);
+      }
+
+      .step-card code {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        margin-bottom: 8px;
+        padding: 0 10px;
+        border: 1px solid rgba(16, 33, 63, 0.12);
+        border-radius: 999px;
+        background: #fff;
+        color: #31435f;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+      }
+
+      .docs-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .doc-card {
+        min-height: 196px;
+        padding: 24px;
+        transition:
+          transform 160ms ease,
+          border-color 160ms ease,
+          box-shadow 160ms ease;
+      }
+
+      .doc-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(44, 101, 180, 0.32);
+        box-shadow: 0 18px 42px rgba(28, 45, 80, 0.1);
+      }
+
+      .doc-link {
+        display: inline-flex;
+        margin-top: 18px;
+        color: var(--blue);
+        font-size: 14px;
+        font-weight: 760;
+      }
+
+      .download-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 24px;
+        padding: 34px;
+        border: 1px solid rgba(245, 170, 25, 0.34);
+        border-radius: 8px;
+        background:
+          linear-gradient(135deg, rgba(255, 249, 235, 0.96), rgba(255, 255, 255, 0.92)),
+          #fff;
+      }
+
+      .download-panel h2 {
+        font-size: clamp(28px, 4vw, 42px);
+      }
+
+      .download-panel p {
+        max-width: 720px;
+        margin: 14px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      footer {
+        padding: 40px 0 56px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .footer-inner {
+        width: min(var(--max), calc(100% - 36px));
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        border-top: 1px solid var(--line);
+        padding-top: 24px;
+      }
+
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      .footer-links a {
+        color: #344866;
+        font-weight: 640;
+      }
+
+      @media (max-width: 980px) {
+        .nav-inner {
+          min-height: auto;
+          padding: 14px 0;
+          flex-wrap: wrap;
+        }
+
+        .nav-links {
+          order: 3;
+          width: 100%;
+          justify-content: center;
+          gap: 15px;
+        }
+
+        .hero {
+          padding-top: 54px;
+        }
+
+        .hero-grid,
+        .visual-band,
+        .download-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-grid {
+          gap: 38px;
+        }
+
+        .feature-grid,
+        .docs-grid,
+        .steps-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .section-head {
+          display: block;
+        }
+
+        .section-note {
+          margin-top: 14px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .nav-inner,
+        .hero,
+        .section-inner,
+        .footer-inner {
+          width: min(100% - 28px, var(--max));
+        }
+
+        .brand-subtitle,
+        .nav-links {
+          display: none;
+        }
+
+        .nav-actions {
+          gap: 8px;
+        }
+
+        .nav-actions .button {
+          display: none;
+        }
+
+        .hero {
+          padding: 44px 0 56px;
+        }
+
+        h1 {
+          font-size: clamp(44px, 18vw, 64px);
+        }
+
+        .hero-copy {
+          font-size: 17px;
+        }
+
+        .hero-card-caption {
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .feature-grid,
+        .docs-grid,
+        .steps-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .section {
+          padding: 58px 0;
+        }
+
+        .download-panel {
+          padding: 24px;
+        }
+
+        .footer-inner {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav">
+        <div class="nav-inner">
+          <a class="brand" href="#top" aria-label="Qise">
+            <img class="brand-mark" src="src-tauri/icons/logo.png" alt="" />
+            <span class="brand-text">
+              <span class="brand-name">Qise</span>
+              <span class="brand-subtitle" data-lang="zh">本地 AI Agent 安全引擎</span>
+              <span class="brand-subtitle" data-lang="en">Local-first security for AI agents</span>
+            </span>
+          </a>
+
+          <nav class="nav-links" aria-label="Primary navigation">
+            <a href="#features"><span data-lang="zh">能力</span><span data-lang="en">Features</span></a>
+            <a href="#workflow"><span data-lang="zh">工作流</span><span data-lang="en">Workflow</span></a>
+            <a href="#docs"><span data-lang="zh">文档</span><span data-lang="en">Docs</span></a>
+            <a href="#download"><span data-lang="zh">下载</span><span data-lang="en">Download</span></a>
+          </nav>
+
+          <div class="nav-actions">
+            <div class="lang-switch" aria-label="Language switch">
+              <button type="button" class="is-active" data-set-lang="zh">中文</button>
+              <button type="button" data-set-lang="en">EN</button>
+            </div>
+            <a class="button button-secondary" href="https://github.com/WhitzardAgent/qise">
+              GitHub
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main id="top">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-grid">
+            <div>
+              <div class="eyebrow">
+                <span data-lang="zh">当前版本 v0.2.0</span>
+                <span data-lang="en">Current release v0.2.0</span>
+              </div>
+              <h1 id="hero-title">
+                <span data-lang="zh" style="font-size: 50px;">Qise: AI Agent 的安全引擎</span>
+                <span data-lang="en">Keep AI agent runtime risk under local control.</span>
+              </h1>
+              <p class="hero-copy">
+                <span data-lang="zh">
+                  Qise 运行在你自己的电脑上，为 Codex、OpenClaw、Claude Code
+                  和自定义 Agent 增加一层可审计的本地安全防护：扫描集成、接入 Guard Proxy、拦截危险动作，并记录清晰的安全事件。
+                </span>
+                <span data-lang="en">
+                  Qise runs on your own machine and adds an auditable local safety layer for
+                  Codex, OpenClaw, Claude Code, and custom agents: scan integrations, route traffic
+                  through a guard proxy, block risky actions, and keep readable security events.
+                </span>
+              </p>
+
+              <div class="hero-actions">
+                <a class="button button-primary" href="https://github.com/WhitzardAgent/qise/releases">
+                  <span data-lang="zh">免费下载</span>
+                  <span data-lang="en">Free download</span>
+                </a>
+                <a class="button button-secondary" href="https://github.com/WhitzardAgent/qise">
+                  <span data-lang="zh">查看 GitHub 仓库</span>
+                  <span data-lang="en">View GitHub repository</span>
+                </a>
+              </div>
+
+              <div class="hero-meta" aria-label="Project highlights">
+                <span class="meta-pill">Windows x64</span>
+                <span class="meta-pill">macOS Apple Silicon</span>
+                <span class="meta-pill">14 Guard categories</span>
+                <span class="meta-pill">Local-first</span>
+              </div>
+            </div>
+
+            <figure class="hero-card">
+              <img src="docs/qise-frame.png" alt="Qise local-first AI agent runtime security framework overview" style="width: 100%; max-width: 16000px;" />
+              <figcaption class="hero-card-caption">
+                <span data-lang="zh">首页主视觉：AI Agent 运行时安全生命周期防护</span>
+                <span data-lang="en">Hero visual: AI agent runtime security lifecycle protection</span>
+                <span>Qise</span>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section class="section alt" id="features" aria-labelledby="features-title">
+          <div class="section-inner">
+            <div class="section-head">
+              <h2 id="features-title">
+                <span data-lang="zh" >守护 Agent 系统的关键边界。</span>
+                <span data-lang="en">Qise does not replace your agent. It guards the boundary before system impact.</span>
+              </h2>
+              <p class="section-note">
+                <span data-lang="zh">
+                  桌面应用和 CLI 共享同一套 Python Qise 产品引擎，保护行为保持一致，适合普通用户、终端用户和 Agent 开发者。
+                </span>
+                <span data-lang="en">
+                  The desktop app and CLI share the same Python Qise product engine, keeping
+                  protection behavior aligned for users, terminal workflows, and agent developers.
+                </span>
+              </p>
+            </div>
+
+            <div class="feature-grid">
+              <article class="feature-card">
+                <div class="feature-kicker">01</div>
+                <h3><span data-lang="zh">运行前扫描</span><span data-lang="en">Scan Before Trust</span></h3>
+                <p>
+                  <span data-lang="zh">在启用 skill、MCP 配置或 Agent 配置前，识别注入文本、风险命令和可疑回调。</span>
+                  <span data-lang="en">Inspect skills, MCP configs, and agent configs before enabling them.</span>
+                </p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-kicker">02</div>
+                <h3><span data-lang="zh">本地 Guard Proxy</span><span data-lang="en">Local Guard Proxy</span></h3>
+                <p>
+                  <span data-lang="zh">把 Agent 的模型请求接入本地代理，在工具调用真正执行前进行上下文审查。</span>
+                  <span data-lang="en">Route model traffic through a local proxy and review context before execution.</span>
+                </p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-kicker">03</div>
+                <h3><span data-lang="zh">危险动作拦截</span><span data-lang="en">Risky Action Blocking</span></h3>
+                <p>
+                  <span data-lang="zh">覆盖 shell、文件系统、网络、凭据与外传等风险类别，阻断高危操作。</span>
+                  <span data-lang="en">Cover shell, filesystem, network, credential, and exfiltration risks.</span>
+                </p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-kicker">04</div>
+                <h3><span data-lang="zh">可读事件轨迹</span><span data-lang="en">Readable Event Trail</span></h3>
+                <p>
+                  <span data-lang="zh">本地 JSONL 事件记录风险、证据、判定和建议；默认不保存完整模型流量。</span>
+                  <span data-lang="en">Keep local JSONL events with risk, evidence, verdict, and recommendations.</span>
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="workflow" aria-labelledby="workflow-title">
+          <div class="section-inner">
+            <div class="visual-band">
+              <div class="visual-image">
+                <img src="qise_desktop_ui_mockups/qise_home.png" alt="Qise desktop app home portal for agent detection, protection, scans, and security events" />
+              </div>
+              <div>
+                <h2 id="workflow-title">
+                  <span data-lang="zh">从预检到运行时审查，一条本地优先的防线。</span>
+                  <span data-lang="en">From preflight to runtime review, a local-first line of defense.</span>
+                </h2>
+                <div class="list">
+                  <div class="list-item">
+                    <span class="list-number">1</span>
+                    <div>
+                      <strong><span data-lang="zh">Detect Agents</span><span data-lang="en">Detect agents</span></strong>
+                      <span data-lang="zh">识别 Codex、OpenClaw、Claude Code 等本地 Agent 环境。</span>
+                      <span data-lang="en">Find supported local agent environments such as Codex, OpenClaw, and Claude Code.</span>
+                    </div>
+                  </div>
+                  <div class="list-item">
+                    <span class="list-number">2</span>
+                    <div>
+                      <strong><span data-lang="zh">Protect</span><span data-lang="en">Protect</span></strong>
+                      <span data-lang="zh">备份配置，将 Agent 流量接入 Qise 本地代理，保留可恢复路径。</span>
+                      <span data-lang="en">Back up config, route agent traffic through Qise, and keep a restore path.</span>
+                    </div>
+                  </div>
+                  <div class="list-item">
+                    <span class="list-number">3</span>
+                    <div>
+                      <strong><span data-lang="zh">Audit Events</span><span data-lang="en">Audit events</span></strong>
+                      <span data-lang="zh">查看风险、证据、判定和建议，理解每一次告警或拦截。</span>
+                      <span data-lang="en">Review risk, evidence, verdicts, and recommendations for warnings and blocks.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section alt" aria-labelledby="start-title">
+          <div class="section-inner">
+            <div class="section-head">
+              <h2 id="start-title">
+                <span data-lang="zh">按你的使用方式开始。</span>
+                <span data-lang="en">Start from the workflow you already use.</span>
+              </h2>
+              <p class="section-note">
+                <span data-lang="zh">Qise 同时提供桌面产品、CLI 和开发者适配入口。</span>
+                <span data-lang="en">Qise offers a desktop product, CLI workflows, and developer adapters.</span>
+              </p>
+            </div>
+
+            <div class="steps-grid">
+              <article class="step-card">
+                <code>Desktop App</code>
+                <h3><span data-lang="zh">普通 Agent 用户</span><span data-lang="en">Regular agent users</span></h3>
+                <p>
+                  <span data-lang="zh">用可视化页面检测 Agent、一键保护、查看事件日志和备份状态。</span>
+                  <span data-lang="en">Detect agents, protect them, view events, and manage backups visually.</span>
+                </p>
+              </article>
+              <article class="step-card">
+                <code>qise CLI</code>
+                <h3><span data-lang="zh">终端和脚本用户</span><span data-lang="en">Terminal and script users</span></h3>
+                <p>
+                  <span data-lang="zh">运行 scan、protect、check、events 等命令，把安全检查写入自动化流程。</span>
+                  <span data-lang="en">Run scan, protect, check, and events commands inside automated flows.</span>
+                </p>
+              </article>
+              <article class="step-card">
+                <code>SDK / Adapters</code>
+                <h3><span data-lang="zh">Agent 开发者</span><span data-lang="en">Agent developers</span></h3>
+                <p>
+                  <span data-lang="zh">把 Qise 检查接入 LangGraph、OpenAI Agents SDK、Nanobot、Hermes 或 NexAU。</span>
+                  <span data-lang="en">Add Qise checks to LangGraph, OpenAI Agents SDK, Nanobot, Hermes, or NexAU.</span>
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="docs" aria-labelledby="docs-title">
+          <div class="section-inner">
+            <div class="section-head">
+              <h2 id="docs-title">
+                <span data-lang="zh">项目文档速览。</span>
+                <span data-lang="en">Documentation highlights.</span>
+              </h2>
+              <p class="section-note">
+                <span data-lang="zh">根据当前仓库中的 README 与 docs 内容整理，先给访问者一条清晰的阅读路径。</span>
+                <span data-lang="en">A clear reading path collected from the current README and docs in this repository.</span>
+              </p>
+            </div>
+
+            <div class="docs-grid">
+              <a class="doc-card" href="https://github.com/WhitzardAgent/qise/blob/main/docs/quickstart.md">
+                <h3><span data-lang="zh">Quickstart</span><span data-lang="en">Quickstart</span></h3>
+                <p>
+                  <span data-lang="zh">从第一次检测 Agent、开启保护到查看事件，快速走完产品闭环。</span>
+                  <span data-lang="en">Walk through detection, protection, and event review for the first product loop.</span>
+                </p>
+                <span class="doc-link"><span data-lang="zh">阅读文档</span><span data-lang="en">Read doc</span></span>
+              </a>
+              <a class="doc-card" href="https://github.com/WhitzardAgent/qise/blob/main/docs/install.md">
+                <h3><span data-lang="zh">Install</span><span data-lang="en">Install</span></h3>
+                <p>
+                  <span data-lang="zh">了解从 Release 安装桌面应用，或从源码构建 macOS 应用与 CLI 的方式。</span>
+                  <span data-lang="en">Install from releases or build the desktop app and CLI from source.</span>
+                </p>
+                <span class="doc-link"><span data-lang="zh">阅读文档</span><span data-lang="en">Read doc</span></span>
+              </a>
+              <a class="doc-card" href="https://github.com/WhitzardAgent/qise/blob/main/docs/architecture.md">
+                <h3><span data-lang="zh">Architecture</span><span data-lang="en">Architecture</span></h3>
+                <p>
+                  <span data-lang="zh">理解 Qise 如何连接 Agent、本地系统工具、Guard 引擎与上游模型 API。</span>
+                  <span data-lang="en">Understand how Qise connects agents, local tools, guard engines, and model APIs.</span>
+                </p>
+                <span class="doc-link"><span data-lang="zh">阅读文档</span><span data-lang="en">Read doc</span></span>
+              </a>
+              <a class="doc-card" href="https://github.com/WhitzardAgent/qise/blob/main/docs/guards.md">
+                <h3><span data-lang="zh">Guards</span><span data-lang="en">Guards</span></h3>
+                <p>
+                  <span data-lang="zh">查看规则、语义审查和多类别风险识别如何协同工作。</span>
+                  <span data-lang="en">See how rules, semantic review, and risk categories work together.</span>
+                </p>
+                <span class="doc-link"><span data-lang="zh">阅读文档</span><span data-lang="en">Read doc</span></span>
+              </a>
+              <a class="doc-card" href="https://github.com/WhitzardAgent/qise/blob/main/docs/privacy.md">
+                <h3><span data-lang="zh">Privacy</span><span data-lang="en">Privacy</span></h3>
+                <p>
+                  <span data-lang="zh">了解本地状态、备份、事件记录和模型流量的隐私边界。</span>
+                  <span data-lang="en">Review privacy boundaries for local state, backups, events, and model traffic.</span>
+                </p>
+                <span class="doc-link"><span data-lang="zh">阅读文档</span><span data-lang="en">Read doc</span></span>
+              </a>
+              <a class="doc-card" href="https://github.com/WhitzardAgent/qise/blob/main/docs/threat-model.md">
+                <h3><span data-lang="zh">Threat Model</span><span data-lang="en">Threat Model</span></h3>
+                <p>
+                  <span data-lang="zh">梳理提示注入、恶意工具描述、危险命令和数据外传等风险场景。</span>
+                  <span data-lang="en">Map prompt injection, malicious tool descriptions, unsafe commands, and exfiltration risks.</span>
+                </p>
+                <span class="doc-link"><span data-lang="zh">阅读文档</span><span data-lang="en">Read doc</span></span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="download" aria-labelledby="download-title">
+          <div class="section-inner">
+            <div class="download-panel">
+              <div>
+                <h2 id="download-title">
+                  <span data-lang="zh">免费下载 Qise v0.2.0。</span>
+                  <span data-lang="en">Download Qise v0.2.0 for free.</span>
+                </h2>
+                <p>
+                  <span data-lang="zh">
+                    前往 GitHub Releases 获取 macOS Apple Silicon DMG 或 Windows x64 安装包。项目仍处于 alpha/MVP 阶段，欢迎通过 Issue 和 PR 反馈。
+                  </span>
+                  <span data-lang="en">
+                    Go to GitHub Releases for the macOS Apple Silicon DMG or Windows x64 installer.
+                    Qise is still an alpha/MVP project, and issues and pull requests are welcome.
+                  </span>
+                </p>
+              </div>
+              <div class="hero-actions">
+                <a class="button button-primary" href="https://github.com/WhitzardAgent/qise/releases">
+                  <span data-lang="zh">打开 Releases</span>
+                  <span data-lang="en">Open Releases</span>
+                </a>
+                <a class="button button-secondary" href="https://github.com/WhitzardAgent/qise">
+                  <span data-lang="zh">仓库 WhitzardAgent/qise</span>
+                  <span data-lang="en">Repository WhitzardAgent/qise</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div class="footer-inner">
+          <div>
+            <strong>Qise</strong>
+            <span data-lang="zh"> · 上海创智学院 (SII) | 复旦大学</span>
+            <span data-lang="en"> · Shanghai Innovation Institute (SII) | Fudan University</span>
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/WhitzardAgent/qise">GitHub</a>
+            <a href="https://github.com/WhitzardAgent/qise/releases">Releases</a>
+            <a href="https://github.com/WhitzardAgent/qise/blob/main/README_CN.md">README_CN</a>
+            <a href="https://github.com/WhitzardAgent/qise/blob/main/README.md">README</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      const root = document.documentElement;
+      const buttons = document.querySelectorAll("[data-set-lang]");
+      const title = {
+        zh: "Qise | 本地 AI Agent 的安全引擎",
+        en: "Qise | Local-First Security for AI Agents",
+      };
+
+      function setLanguage(lang) {
+        const normalized = lang === "en" ? "en" : "zh";
+        root.lang = normalized === "en" ? "en" : "zh-CN";
+        document.title = title[normalized];
+        localStorage.setItem("qise-site-lang", normalized);
+        buttons.forEach((button) => {
+          button.classList.toggle("is-active", button.dataset.setLang === normalized);
+        });
+      }
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => setLanguage(button.dataset.setLang));
+      });
+
+      setLanguage(localStorage.getItem("qise-site-lang") || "zh");
+    </script>
+  </body>
+</html>

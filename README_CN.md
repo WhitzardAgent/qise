@@ -30,6 +30,10 @@ Qise 有三个入口：
 
 ## Qise 能做什么
 
+<div align="center"> 
+<img src=docs/qise-frame.png width="88%"/>
+</div>
+
 AI 编程 Agent 可以读文件、执行 shell 命令、调用 MCP server、安装 skill、使用 memory，并把数据发送给模型 API。这些能力很有用，但也带来了新的本地安全边界：被投毒的工具描述、恶意 skill、提示注入、不安全命令或意外密钥泄露，都可能造成真实的本机风险。
 
 Qise 运行在你的机器上，作为现有 Agent 的旁路防护。它不是模型服务商，也不会替代你正在使用的 Agent。
